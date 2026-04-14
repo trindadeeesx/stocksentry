@@ -131,6 +131,16 @@
 			<artifactId>resend-java</artifactId>
 			<version>3.1.0</version>
 		</dependency>
+		<dependency>
+			<groupId>com.sendinblue</groupId>
+			<artifactId>sib-api-v3-sdk</artifactId>
+			<version>7.0.0</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>
