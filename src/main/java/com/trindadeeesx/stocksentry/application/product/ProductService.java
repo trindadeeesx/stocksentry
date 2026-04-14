@@ -46,7 +46,6 @@ public class ProductService {
         return toResponse(product);
     }
 
-    @Cacheable(value = "products", key = "#tenantId + '-' + #pageable.pageNumber")
     public Page<ProductResponse> findAll(Pageable pageable) {
         this.pageable = pageable;
         UUID tenantId = securityUtils.getCurrentTenantId();
@@ -83,12 +82,13 @@ public class ProductService {
         productRepository.save(product);
     }
 
-    @Cacheable(value = "critical-products", key = "#root.target.securityUtils.currentTenantId")
+    @Cacheable(value = "critical-products", key = "'critical'")
     public List<ProductResponse> findCritical() {
         return productRepository.findCriticalByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
     }
-    @Cacheable(value = "critical-products", key = "'out-' + #root.target.securityUtils.currentTenantId")
+
+    @Cacheable(value = "critical-products", key = "'out-of-stock'")
     public List<ProductResponse> findOutOfStock() {
         return productRepository.findOutOfStockByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
