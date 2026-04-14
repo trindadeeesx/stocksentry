@@ -10,6 +10,7 @@ import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.stock.MovementRequest;
 import com.trindadeeesx.stocksentry.web.dto.stock.MovementResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +28,7 @@ public class StockService {
     private final SecurityUtils securityUtils;
     private final ApplicationEventPublisher eventPublisher;
 
+    @CacheEvict(value = {"products", "critical-products", "stock-summary"}, allEntries = true)
     @Transactional
     public MovementResponse registerMovement(UUID productId, MovementRequest request) {
         Product product = productService.getProduct(productId);

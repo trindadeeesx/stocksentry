@@ -6,6 +6,8 @@ import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ public class ProductService {
     private final SecurityUtils securityUtils;
     private Pageable pageable;
 
+    @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public ProductResponse create(ProductRequest request) {
         UUID tenantId = securityUtils.getCurrentTenantId();
 
@@ -43,6 +46,7 @@ public class ProductService {
         return toResponse(product);
     }
 
+    @Cacheable(value = "products", key = "#tenantId + '-' + #pageable.pageNumber")
     public Page<ProductResponse> findAll(Pageable pageable) {
         this.pageable = pageable;
         UUID tenantId = securityUtils.getCurrentTenantId();
@@ -54,6 +58,7 @@ public class ProductService {
         return toResponse(getProduct(id));
     }
 
+    @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public ProductResponse update(UUID id, ProductRequest request) {
         Product product = getProduct(id);
 
@@ -71,17 +76,19 @@ public class ProductService {
         return toResponse(productRepository.save(product));
     }
 
+    @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public void delete(UUID id) {
         Product product = getProduct(id);
         product.setActive(false);
         productRepository.save(product);
     }
 
+    @Cacheable(value = "critical-products", key = "#root.target.securityUtils.currentTenantId")
     public List<ProductResponse> findCritical() {
         return productRepository.findCriticalByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
     }
-
+    @Cacheable(value = "critical-products", key = "'out-' + #root.target.securityUtils.currentTenantId")
     public List<ProductResponse> findOutOfStock() {
         return productRepository.findOutOfStockByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
