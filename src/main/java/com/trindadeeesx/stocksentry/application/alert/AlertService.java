@@ -10,6 +10,7 @@ import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
+import com.trindadeeesx.stocksentry.infraestructure.sms.BrevoSmsService;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
@@ -30,6 +31,7 @@ public class AlertService {
     private final AlertRepository alertRepository;
     private final SecurityUtils securityUtils;
     private final Resend resend;
+    private final BrevoSmsService brevoSmsService;
 
     @Value("${resend.from}")
     private String from;
@@ -67,23 +69,31 @@ public class AlertService {
 
     @Async
     public void processStockAlert(Product product) {
-        // evita spam — só dispara se não tiver alerta SENT recente pra esse produto
+        System.out.println(">>> processStockAlert chamado para: " + product.getName());
+
         if (alertRepository.existsByProductIdAndStatus(product.getId(), AlertStatus.SENT)) {
+            System.out.println(">>> JÁ TEM ALERTA SENT, abortando");
             return;
         }
 
         List<AlertConfig> configs = alertConfigRepository
                 .findAllByTenantIdAndActiveTrue(product.getTenant().getId());
 
+        System.out.println(">>> configs encontrados: " + configs.size());
+
         for (AlertConfig config : configs) {
+            System.out.println(">>> disparando tipo: " + config.getType() + " para: " + config.getDestination());
             AlertStatus status = AlertStatus.FAILED;
             try {
-                if (config.getType() == AlertType.EMAIL) {
-                    sendEmail(config.getDestination(), product);
+                switch (config.getType()) {
+                    case EMAIL -> sendEmail(config.getDestination(), product);
+                    case SMS   -> sendSms(config.getDestination(), product);
                 }
+                System.out.println(">>> SUCESSO: " + config.getType());
                 status = AlertStatus.SENT;
             } catch (Exception e) {
-                // log e continua pros outros configs
+                System.out.println(">>> ERRO ao disparar: " + e.getMessage());
+                e.printStackTrace();
             }
 
             alertRepository.save(
@@ -97,6 +107,13 @@ public class AlertService {
                             .build()
             );
         }
+    }
+
+    private void sendSms(String destination, Product product) {
+        String message = "Estoque critico: " + product.getName() +
+                " | Atual: " + product.getCurrentStock() +
+                " | Minimo: " + product.getMinStock();
+        brevoSmsService.send(destination, message);
     }
 
     private void sendEmail(String destination, Product product) throws Exception {
