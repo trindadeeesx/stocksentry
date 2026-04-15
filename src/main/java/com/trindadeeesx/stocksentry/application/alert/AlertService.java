@@ -2,21 +2,19 @@ package com.trindadeeesx.stocksentry.application.alert;
 
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
+import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
 import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
-import com.trindadeeesx.stocksentry.domain.alert.AlertType;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
-import com.trindadeeesx.stocksentry.infraestructure.sms.BrevoSmsService;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +29,7 @@ public class AlertService {
     private final AlertRepository alertRepository;
     private final SecurityUtils securityUtils;
     private final Resend resend;
-    private final BrevoSmsService brevoSmsService;
+    private final PushNotificationService pushNotificationService;
 
     @Value("${resend.from}")
     private String from;
@@ -69,31 +67,27 @@ public class AlertService {
 
     @Async
     public void processStockAlert(Product product) {
-        System.out.println(">>> processStockAlert chamado para: " + product.getName());
-
         if (alertRepository.existsByProductIdAndStatus(product.getId(), AlertStatus.SENT)) {
-            System.out.println(">>> JÁ TEM ALERTA SENT, abortando");
             return;
         }
 
         List<AlertConfig> configs = alertConfigRepository
                 .findAllByTenantIdAndActiveTrue(product.getTenant().getId());
 
-        System.out.println(">>> configs encontrados: " + configs.size());
-
         for (AlertConfig config : configs) {
-            System.out.println(">>> disparando tipo: " + config.getType() + " para: " + config.getDestination());
             AlertStatus status = AlertStatus.FAILED;
             try {
                 switch (config.getType()) {
                     case EMAIL -> sendEmail(config.getDestination(), product);
-                    case SMS   -> sendSms(config.getDestination(), product);
+                    case PUSH -> pushNotificationService.sendToAllDevices(
+                            product.getTenant().getId(),
+                            "⚠️ Estoque crítico: " + product.getName(),
+                            "Atual: " + product.getCurrentStock() + " | Mínimo: " + product.getMinStock()
+                    );
                 }
-                System.out.println(">>> SUCESSO: " + config.getType());
                 status = AlertStatus.SENT;
             } catch (Exception e) {
-                System.out.println(">>> ERRO ao disparar: " + e.getMessage());
-                e.printStackTrace();
+                System.out.println("Erro ao disparar alerta: " + e.getMessage());
             }
 
             alertRepository.save(
@@ -107,13 +101,6 @@ public class AlertService {
                             .build()
             );
         }
-    }
-
-    private void sendSms(String destination, Product product) {
-        String message = "Estoque critico: " + product.getName() +
-                " | Atual: " + product.getCurrentStock() +
-                " | Minimo: " + product.getMinStock();
-        brevoSmsService.send(destination, message);
     }
 
     private void sendEmail(String destination, Product product) throws Exception {
