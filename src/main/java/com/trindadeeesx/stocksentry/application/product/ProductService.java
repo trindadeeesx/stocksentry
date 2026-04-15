@@ -21,7 +21,6 @@ import java.util.UUID;
 public class ProductService {
     private final ProductRepository productRepository;
     private final SecurityUtils securityUtils;
-    private Pageable pageable;
 
     @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public ProductResponse create(ProductRequest request) {
@@ -47,7 +46,6 @@ public class ProductService {
     }
 
     public Page<ProductResponse> findAll(Pageable pageable) {
-        this.pageable = pageable;
         UUID tenantId = securityUtils.getCurrentTenantId();
         return productRepository.findAllByTenantIdAndActiveTrue(tenantId, pageable)
                 .map(this::toResponse);
