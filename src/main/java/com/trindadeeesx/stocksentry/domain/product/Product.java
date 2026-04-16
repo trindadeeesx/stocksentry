@@ -57,7 +57,4 @@ public class Product {
         return currentStock.compareTo(minStock) < 0;
     }
 
-    public getLastl() {
-
-    }
 }
