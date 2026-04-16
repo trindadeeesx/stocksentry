@@ -71,34 +71,6 @@ public class AlertService {
 
     @Async
     public void processStockAlert(Product product) {
-        /**
-         * Evitar SPAM
-         * Permitir Re-disparo
-         *      Ex.:
-         *          Item A -> atual: 15, mínimo: 10
-         *          Item B -> atual: 40, mínimo: 20
-         *
-         *          Item A teve saída de 8 unidades. Total 7. Disparar alerta.
-         *          Após x minutos, Item A teve saída de 3 unidades. Total 4. Disparar alerta.
-         *
-         *          Após y minutos, Item B teve saída de 25 unidades. Total 14.
-         *          Se (y - x ) > 30 minutos, disparar alerta do Item A junto ao Item B.
-         *
-         * Disparar alerta quando cruzar o limiar de cima pra baixo
-         * Não repetir enquanto permanecer abaixo, a menos que haja cooldown de 30 minutos
-         * Permitir novo disparo quando voltar acima e cair de novo
-         *
-         * Guardar algo como lastAlertAt ou wasBelowMin (como tipo LocalDateTime)
-         * Isso pode ir em product ou uma tabela dedicada
-         *
-         * Acima do mínimo -> abaixo do mínimo -> Dispara
-         * Abaixo do mínimo -> outra saída -> Não dispara (a não ser que tenha cooldown)
-         * Abaixo do mínimo -> entrada para acima do minimo -> recupera estado, apaga historico
-         *
-         * COOLDOWN: now - lastAlertAt > x minutos
-         *
-         *
-         */
         if (!shouldDispatch(product)) {
             return;
         }
