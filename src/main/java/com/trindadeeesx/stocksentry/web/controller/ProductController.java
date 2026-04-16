@@ -48,6 +48,12 @@ public class ProductController {
         productService.delete(id);
     }
 
+    @DeleteMapping("/{id}/hard")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void hardDelete(@PathVariable UUID id) {
+        productService.hardDelete(id);
+    }
+
     @GetMapping("/critical")
     public List<ProductResponse> critical() {
         return productService.findCritical();

@@ -10,6 +10,5 @@ public class AlertConfigRequest {
     @NotNull
     private AlertType type;
 
-    @NotBlank
     private String destination;
 }

@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.stock;
 
+import com.trindadeeesx.stocksentry.application.alert.AlertService;
 import com.trindadeeesx.stocksentry.application.product.ProductService;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.stock.StockBelowMinEvent;
@@ -27,6 +28,7 @@ public class StockService {
     private final ProductService productService;
     private final SecurityUtils securityUtils;
     private final ApplicationEventPublisher eventPublisher;
+    private final AlertService alertService;
 
     @CacheEvict(value = {"products", "critical-products", "stock-summary"}, allEntries = true)
     @Transactional
@@ -34,9 +36,10 @@ public class StockService {
         Product product = productService.getProduct(productId);
         User user = securityUtils.getCurrentUser();
 
+        boolean wasBelowMin = product.isBelowMinStock();
+
         BigDecimal stockBefore = product.getCurrentStock();
         BigDecimal stockAfter = calculateNewStock(product, request);
-
         product.setCurrentStock(stockAfter);
 
         StockMovement movement = stockMovementRepository.save(
@@ -54,6 +57,8 @@ public class StockService {
 
         if (product.isBelowMinStock()) {
             eventPublisher.publishEvent(new StockBelowMinEvent(this, product));
+        } else if (wasBelowMin) {
+            alertService.resetAlert(product);
         }
 
         return toResponse(movement);

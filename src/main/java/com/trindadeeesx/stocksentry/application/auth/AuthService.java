@@ -61,14 +61,9 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        try {
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-            );
-        } catch (Exception e) {
-            System.out.println("ERRO: " + e.getClass().getName() + " — " + e.getMessage());
-            throw e;
-        }
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+        );
 
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
 

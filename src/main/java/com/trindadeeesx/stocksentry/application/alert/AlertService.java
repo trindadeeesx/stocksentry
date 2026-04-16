@@ -9,6 +9,7 @@ import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
+import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
@@ -25,6 +26,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AlertService {
+    private static final int COOLDOWN_MINUTES = 30;
+
     private final AlertConfigRepository alertConfigRepository;
     private final AlertRepository alertRepository;
     private final SecurityUtils securityUtils;
@@ -33,13 +36,14 @@ public class AlertService {
 
     @Value("${resend.from}")
     private String from;
+    private final ProductRepository productRepository;
 
     public AlertConfigResponse createConfig(AlertConfigRequest request) {
         AlertConfig config = alertConfigRepository.save(
                 AlertConfig.builder()
                         .tenant(securityUtils.getCurrentUser().getTenant())
                         .type(request.getType())
-                        .destination(request.getDestination())
+                        .destination(request.getDestination() != null ? request.getDestination() : "")
                         .active(true)
                         .build()
         );
@@ -67,12 +71,44 @@ public class AlertService {
 
     @Async
     public void processStockAlert(Product product) {
-        if (alertRepository.existsByProductIdAndStatus(product.getId(), AlertStatus.SENT)) {
+        /**
+         * Evitar SPAM
+         * Permitir Re-disparo
+         *      Ex.:
+         *          Item A -> atual: 15, mínimo: 10
+         *          Item B -> atual: 40, mínimo: 20
+         *
+         *          Item A teve saída de 8 unidades. Total 7. Disparar alerta.
+         *          Após x minutos, Item A teve saída de 3 unidades. Total 4. Disparar alerta.
+         *
+         *          Após y minutos, Item B teve saída de 25 unidades. Total 14.
+         *          Se (y - x ) > 30 minutos, disparar alerta do Item A junto ao Item B.
+         *
+         * Disparar alerta quando cruzar o limiar de cima pra baixo
+         * Não repetir enquanto permanecer abaixo, a menos que haja cooldown de 30 minutos
+         * Permitir novo disparo quando voltar acima e cair de novo
+         *
+         * Guardar algo como lastAlertAt ou wasBelowMin (como tipo LocalDateTime)
+         * Isso pode ir em product ou uma tabela dedicada
+         *
+         * Acima do mínimo -> abaixo do mínimo -> Dispara
+         * Abaixo do mínimo -> outra saída -> Não dispara (a não ser que tenha cooldown)
+         * Abaixo do mínimo -> entrada para acima do minimo -> recupera estado, apaga historico
+         *
+         * COOLDOWN: now - lastAlertAt > x minutos
+         *
+         *
+         */
+        if (!shouldDispatch(product)) {
             return;
         }
 
         List<AlertConfig> configs = alertConfigRepository
                 .findAllByTenantIdAndActiveTrue(product.getTenant().getId());
+
+        if (configs.isEmpty()) {
+            return;
+        }
 
         for (AlertConfig config : configs) {
             AlertStatus status = AlertStatus.FAILED;
@@ -101,6 +137,30 @@ public class AlertService {
                             .build()
             );
         }
+
+        product.setLastAlert(LocalDateTime.now());
+        productRepository.save(product);
+    }
+
+    /**
+     * regra de disparo
+     * - primeira vez abaixo do minimo (lastAlert == null) -> dispara
+     * - ja abaixo, sem cooldown, não dispara
+     * - ja abaixo, cooldown expirado (30 min) -> dispara
+     */
+    private boolean shouldDispatch(Product product) {
+        if (product.getLastAlert() == null) {
+            return true;
+        }
+
+        return product.getLastAlert()
+                .plusMinutes(COOLDOWN_MINUTES)
+                .isBefore(LocalDateTime.now());
+    }
+
+    public void resetAlert(Product product) {
+        product.setLastAlert(null);
+        productRepository.save(product);
     }
 
     private void sendEmail(String destination, Product product) throws Exception {
