@@ -17,4 +17,8 @@ public class SecurityUtils {
     public UUID getCurrentTenantId() {
         return getCurrentUser().getTenant().getId();
     }
+
+    public UUID getCurrentUserId() {
+        return getCurrentUser().getId();
+    }
 }
