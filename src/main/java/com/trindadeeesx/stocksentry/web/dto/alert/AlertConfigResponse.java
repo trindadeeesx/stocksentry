@@ -9,8 +9,8 @@ import java.util.UUID;
 @Data
 @Builder
 public class AlertConfigResponse {
-    private UUID id;
-    private AlertType type;
-    private String destination;
-    private boolean active;
+	private UUID id;
+	private AlertType type;
+	private String destination;
+	private boolean active;
 }

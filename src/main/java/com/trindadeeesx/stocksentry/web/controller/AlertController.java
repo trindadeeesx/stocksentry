@@ -16,28 +16,28 @@ import java.util.UUID;
 @RequestMapping("/api/v1/alerts")
 @RequiredArgsConstructor
 public class AlertController {
-
-    private final AlertService alertService;
-
-    @PostMapping("/config")
-    @ResponseStatus(HttpStatus.CREATED)
-    public AlertConfigResponse createConfig(@RequestBody @Valid AlertConfigRequest request) {
-        return alertService.createConfig(request);
-    }
-
-    @GetMapping("/config")
-    public List<AlertConfigResponse> findConfigs() {
-        return alertService.findConfigs();
-    }
-
-    @DeleteMapping("/config/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteConfig(@PathVariable UUID id) {
-        alertService.deleteConfig(id);
-    }
-
-    @GetMapping("/history")
-    public List<AlertResponse> history() {
-        return alertService.findAlertHistory();
-    }
+	
+	private final AlertService alertService;
+	
+	@PostMapping("/config")
+	@ResponseStatus(HttpStatus.CREATED)
+	public AlertConfigResponse createConfig(@RequestBody @Valid AlertConfigRequest request) {
+		return alertService.createConfig(request);
+	}
+	
+	@GetMapping("/config")
+	public List<AlertConfigResponse> findConfigs() {
+		return alertService.findConfigs();
+	}
+	
+	@DeleteMapping("/config/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteConfig(@PathVariable UUID id) {
+		alertService.deleteConfig(id);
+	}
+	
+	@GetMapping("/history")
+	public List<AlertResponse> history() {
+		return alertService.findAlertHistory();
+	}
 }

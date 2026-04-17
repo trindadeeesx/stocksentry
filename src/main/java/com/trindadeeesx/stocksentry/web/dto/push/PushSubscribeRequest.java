@@ -5,14 +5,14 @@ import lombok.Data;
 
 @Data
 public class PushSubscribeRequest {
-    @NotBlank
-    private String endpoint;
-
-    @NotBlank
-    private String p256dh;
-
-    @NotBlank
-    private String auth;
-
-    private String deviceName;
+	@NotBlank
+	private String endpoint;
+	
+	@NotBlank
+	private String p256dh;
+	
+	@NotBlank
+	private String auth;
+	
+	private String deviceName;
 }

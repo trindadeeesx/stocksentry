@@ -1,10 +1,8 @@
 package com.trindadeeesx.stocksentry.domain.alert;
 
-import com.trindadeeesx.stocksentry.domain.product.Product;
-import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+
 import java.util.UUID;
 
 @Entity
@@ -15,17 +13,17 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class AlertConfig {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private AlertType type;
-
-    @Column(nullable = false)
-    private String destination;
-
-    @Column(nullable = false)
-    private boolean active = true;
+	@Id
+	@GeneratedValue(strategy = GenerationType.UUID)
+	private UUID id;
+	
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private AlertType type;
+	
+	@Column(nullable = false)
+	private String destination;
+	
+	@Column(nullable = false)
+	private boolean active = true;
 }

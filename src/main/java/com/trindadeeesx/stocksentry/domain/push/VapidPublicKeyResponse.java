@@ -6,5 +6,5 @@ import lombok.Data;
 @Data
 @Builder
 public class VapidPublicKeyResponse {
-    private String publicKey;
+	private String publicKey;
 }

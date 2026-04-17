@@ -9,12 +9,12 @@ import java.math.BigDecimal;
 
 @Data
 public class MovementRequest {
-    @NotNull
-    private MovementType type;
-
-    @NotNull
-    @DecimalMin("0.001")
-    private BigDecimal quantity;
-
-    private String reason;
+	@NotNull
+	private MovementType type;
+	
+	@NotNull
+	@DecimalMin("0.001")
+	private BigDecimal quantity;
+	
+	private String reason;
 }

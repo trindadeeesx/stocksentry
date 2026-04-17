@@ -7,11 +7,11 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ResendConfig {
-    @Value("${resend.api-key}")
-    private String apiKey;
-
-    @Bean
-    public Resend resendClient() {
-        return new Resend(apiKey);
-    }
+	@Value("${resend.api-key}")
+	private String apiKey;
+	
+	@Bean
+	public Resend resendClient() {
+		return new Resend(apiKey);
+	}
 }

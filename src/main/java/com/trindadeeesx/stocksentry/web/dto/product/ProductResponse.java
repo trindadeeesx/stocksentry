@@ -17,13 +17,13 @@ import java.util.UUID;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductResponse {
-    private UUID id;
-    private String name;
-    private String sku;
-    private UnitType unit;
-    private BigDecimal currentStock;
-    private BigDecimal minStock;
-    private boolean active;
-    private boolean critical;
-    private LocalDateTime createdAt;
+	private UUID id;
+	private String name;
+	private String sku;
+	private UnitType unit;
+	private BigDecimal currentStock;
+	private BigDecimal minStock;
+	private boolean active;
+	private boolean critical;
+	private LocalDateTime createdAt;
 }

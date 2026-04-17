@@ -17,10 +17,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AlertResponse {
-    private UUID id;
-    private String productName;
-    private AlertType type;
-    private String destination;
-    private AlertStatus status;
-    private LocalDateTime triggeredAt;
+	private UUID id;
+	private String productName;
+	private AlertType type;
+	private String destination;
+	private AlertStatus status;
+	private LocalDateTime triggeredAt;
 }

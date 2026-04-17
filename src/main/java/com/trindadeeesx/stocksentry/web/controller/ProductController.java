@@ -17,50 +17,50 @@ import java.util.UUID;
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
 public class ProductController {
-
-    private final ProductService productService;
-
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ProductResponse create(@RequestBody @Valid ProductRequest request) {
-        return productService.create(request);
-    }
-
-    @GetMapping
-    public Page<ProductResponse> findAll(Pageable pageable) {
-        return productService.findAll(pageable);
-    }
-
-    @GetMapping("/{id}")
-    public ProductResponse findById(@PathVariable UUID id) {
-        return productService.findById(id);
-    }
-
-    @PutMapping("/{id}")
-    public ProductResponse update(@PathVariable UUID id,
-                                  @RequestBody @Valid ProductRequest request) {
-        return productService.update(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        productService.delete(id);
-    }
-
-    @DeleteMapping("/{id}/hard")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void hardDelete(@PathVariable UUID id) {
-        productService.hardDelete(id);
-    }
-
-    @GetMapping("/critical")
-    public List<ProductResponse> critical() {
-        return productService.findCritical();
-    }
-
-    @GetMapping("/out-of-stock")
-    public List<ProductResponse> outOfStock() {
-        return productService.findOutOfStock();
-    }
+	
+	private final ProductService productService;
+	
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	public ProductResponse create(@RequestBody @Valid ProductRequest request) {
+		return productService.create(request);
+	}
+	
+	@GetMapping
+	public Page<ProductResponse> findAll(Pageable pageable) {
+		return productService.findAll(pageable);
+	}
+	
+	@GetMapping("/{id}")
+	public ProductResponse findById(@PathVariable UUID id) {
+		return productService.findById(id);
+	}
+	
+	@PutMapping("/{id}")
+	public ProductResponse update(@PathVariable UUID id,
+	                              @RequestBody @Valid ProductRequest request) {
+		return productService.update(id, request);
+	}
+	
+	@DeleteMapping("/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void delete(@PathVariable UUID id) {
+		productService.delete(id);
+	}
+	
+	@DeleteMapping("/{id}/hard")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void hardDelete(@PathVariable UUID id) {
+		productService.hardDelete(id);
+	}
+	
+	@GetMapping("/critical")
+	public List<ProductResponse> critical() {
+		return productService.findCritical();
+	}
+	
+	@GetMapping("/out-of-stock")
+	public List<ProductResponse> outOfStock() {
+		return productService.findOutOfStock();
+	}
 }

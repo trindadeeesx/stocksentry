@@ -11,9 +11,9 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @EnableCaching
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class StocksentryApplication {
-
-	public static void main(String[] args) {
+	
+	static void main(String[] args) {
 		SpringApplication.run(StocksentryApplication.class, args);
 	}
-
+	
 }

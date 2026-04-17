@@ -1,6 +1,5 @@
 package com.trindadeeesx.stocksentry.domain.push;
 
-import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -16,22 +15,22 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class PushSubscription {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(nullable = false, unique = true, columnDefinition = "TEXT")
-    private String endpoint;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String p256dh;
-
-    @Column(name = "auth_key", nullable = false, columnDefinition = "TEXT")
-    private String authKey;
-
-    @Column(length = 100)
-    private String deviceName;
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
+	@Id
+	@GeneratedValue(strategy = GenerationType.UUID)
+	private UUID id;
+	
+	@Column(nullable = false, unique = true, columnDefinition = "TEXT")
+	private String endpoint;
+	
+	@Column(nullable = false, columnDefinition = "TEXT")
+	private String p256dh;
+	
+	@Column(name = "auth_key", nullable = false, columnDefinition = "TEXT")
+	private String authKey;
+	
+	@Column(length = 100)
+	private String deviceName;
+	
+	@CreationTimestamp
+	private LocalDateTime createdAt;
 }

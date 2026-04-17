@@ -9,5 +9,5 @@ import java.util.UUID;
 
 @Repository
 public interface AlertConfigRepository extends JpaRepository<AlertConfig, UUID> {
-    List<AlertConfig> findAllByActiveTrue(UUID tenantId);
+    List<AlertConfig> findAllByActiveTrue();
 }

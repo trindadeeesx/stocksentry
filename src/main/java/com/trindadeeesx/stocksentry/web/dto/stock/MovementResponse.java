@@ -17,14 +17,14 @@ import java.util.UUID;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class MovementResponse {
-    private UUID id;
-    private UUID productId;
-    private String productName;
-    private MovementType type;
-    private BigDecimal quantity;
-    private BigDecimal stockBefore;
-    private BigDecimal stockAfter;
-    private String reason;
-    private String performedBy;
-    private LocalDateTime createdAt;
+	private UUID id;
+	private UUID productId;
+	private String productName;
+	private MovementType type;
+	private BigDecimal quantity;
+	private BigDecimal stockBefore;
+	private BigDecimal stockAfter;
+	private String reason;
+	private String performedBy;
+	private LocalDateTime createdAt;
 }

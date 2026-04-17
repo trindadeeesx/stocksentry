@@ -10,16 +10,16 @@ import java.math.BigDecimal;
 
 @Data
 public class ProductRequest {
-    @NotBlank
-    private String name;
-
-    @NotBlank
-    private String sku;
-
-    @NotNull
-    private UnitType unit;
-
-    @NotNull
-    @DecimalMin("0.0")
-    private BigDecimal minStock;
+	@NotBlank
+	private String name;
+	
+	@NotBlank
+	private String sku;
+	
+	@NotNull
+	private UnitType unit;
+	
+	@NotNull
+	@DecimalMin("0.0")
+	private BigDecimal minStock;
 }

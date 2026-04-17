@@ -8,13 +8,13 @@ import java.util.UUID;
 
 @Component
 public class SecurityUtils {
-    public User getCurrentUser() {
-        return (User) SecurityContextHolder.getContext()
-                .getAuthentication()
-                .getPrincipal();
-    }
-
-    public UUID getCurrentUserId() {
-        return getCurrentUser().getId();
-    }
+	public User getCurrentUser() {
+		return (User) SecurityContextHolder.getContext()
+			.getAuthentication()
+			.getPrincipal();
+	}
+	
+	public UUID getCurrentUserId() {
+		return getCurrentUser().getId();
+	}
 }

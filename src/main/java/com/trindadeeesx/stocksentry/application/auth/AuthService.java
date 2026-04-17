@@ -16,44 +16,44 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
-    private final AuthenticationManager authenticationManager;
-
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email already in use");
-        }
-
-        User user = userRepository.save(
-                User.builder()
-                        .name(request.getName())
-                        .email(request.getEmail())
-                        .passwordHash(passwordEncoder.encode(request.getPassword()))
-                        .role(UserRole.ADMIN)
-                        .active(true)
-                        .build()
-        );
-
-        return AuthResponse.builder()
-                .token(jwtService.generateToken(user))
-                .email(user.getEmail())
-                .role(user.getRole().name())
-                .build();
-    }
-
-    public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
-
-        return AuthResponse.builder()
-                .token(jwtService.generateToken(user))
-                .email(user.getEmail())
-                .role(user.getRole().name())
-                .build();
-    }
+	private final UserRepository userRepository;
+	private final PasswordEncoder passwordEncoder;
+	private final JwtService jwtService;
+	private final AuthenticationManager authenticationManager;
+	
+	public AuthResponse register(RegisterRequest request) {
+		if (userRepository.existsByEmail(request.getEmail())) {
+			throw new IllegalArgumentException("Email already in use");
+		}
+		
+		User user = userRepository.save(
+			User.builder()
+				.name(request.getName())
+				.email(request.getEmail())
+				.passwordHash(passwordEncoder.encode(request.getPassword()))
+				.role(UserRole.ADMIN)
+				.active(true)
+				.build()
+		);
+		
+		return AuthResponse.builder()
+			.token(jwtService.generateToken(user))
+			.email(user.getEmail())
+			.role(user.getRole().name())
+			.build();
+	}
+	
+	public AuthResponse login(LoginRequest request) {
+		authenticationManager.authenticate(
+			new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+		);
+		
+		User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
+		
+		return AuthResponse.builder()
+			.token(jwtService.generateToken(user))
+			.email(user.getEmail())
+			.role(user.getRole().name())
+			.build();
+	}
 }

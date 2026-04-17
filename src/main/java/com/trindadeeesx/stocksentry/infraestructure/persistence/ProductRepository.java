@@ -13,13 +13,15 @@ import java.util.UUID;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, UUID> {
-    boolean existsBySku(String sku);
-    Optional<Product> findBySku(String sku);
-    Page<Product> findAllByActiveTrue(Pageable pageable);
-
-    @Query("SELECT p FROM Product p WHERE p.currentStock <= p.minStock AND p.active = true")
-    List<Product> findCritical();
-
-    @Query("SELECT p FROM Product p WHERE p.currentStock = 0 AND p.active = true")
-    List<Product> findOutOfStock();
+	boolean existsBySku(String sku);
+	
+	Optional<Product> findBySku(String sku);
+	
+	Page<Product> findAllByActiveTrue(Pageable pageable);
+	
+	@Query("SELECT p FROM Product p WHERE p.currentStock <= p.minStock AND p.active = true")
+	List<Product> findCritical();
+	
+	@Query("SELECT p FROM Product p WHERE p.currentStock = 0 AND p.active = true")
+	List<Product> findOutOfStock();
 }

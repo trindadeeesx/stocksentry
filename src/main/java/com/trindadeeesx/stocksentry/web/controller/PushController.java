@@ -12,23 +12,23 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/push")
 @RequiredArgsConstructor
 public class PushController {
-
-    private final PushNotificationService pushNotificationService;
-
-    @GetMapping("/vapid-key")
-    public VapidPublicKeyResponse getVapidKey() {
-        return pushNotificationService.getPublicKey();
-    }
-
-    @PostMapping("/subscribe")
-    @ResponseStatus(HttpStatus.CREATED)
-    public void subscribe(@RequestBody @Valid PushSubscribeRequest request) {
-        pushNotificationService.subscribe(request);
-    }
-
-    @DeleteMapping("/subscribe")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void unsubscribe(@RequestParam String endpoint) {
-        pushNotificationService.unsubscribe(endpoint);
-    }
+	
+	private final PushNotificationService pushNotificationService;
+	
+	@GetMapping("/vapid-key")
+	public VapidPublicKeyResponse getVapidKey() {
+		return pushNotificationService.getPublicKey();
+	}
+	
+	@PostMapping("/subscribe")
+	@ResponseStatus(HttpStatus.CREATED)
+	public void subscribe(@RequestBody @Valid PushSubscribeRequest request) {
+		pushNotificationService.subscribe(request);
+	}
+	
+	@DeleteMapping("/subscribe")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void unsubscribe(@RequestParam String endpoint) {
+		pushNotificationService.unsubscribe(endpoint);
+	}
 }

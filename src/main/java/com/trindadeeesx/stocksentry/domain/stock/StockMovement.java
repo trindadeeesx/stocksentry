@@ -19,37 +19,37 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class StockMovement {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
-    private Tenant tenant;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private MovementType type;
-
-    @Column(nullable = false, precision = 10, scale = 3)
-    private BigDecimal quantity;
-
-    @Column(nullable = false, precision = 10, scale = 3)
-    private BigDecimal stockBefore;
-
-    @Column(nullable = false, precision = 10, scale = 3)
-    private BigDecimal stockAfter;
-
-    private String reason;
-
-    @CreationTimestamp
-    private LocalDateTime createdAt;
+	@Id
+	@GeneratedValue(strategy = GenerationType.UUID)
+	private UUID id;
+	
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "product_id", nullable = false)
+	private Product product;
+	
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "tenant_id", nullable = false)
+	private Tenant tenant;
+	
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "user_id", nullable = false)
+	private User user;
+	
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private MovementType type;
+	
+	@Column(nullable = false, precision = 10, scale = 3)
+	private BigDecimal quantity;
+	
+	@Column(nullable = false, precision = 10, scale = 3)
+	private BigDecimal stockBefore;
+	
+	@Column(nullable = false, precision = 10, scale = 3)
+	private BigDecimal stockAfter;
+	
+	private String reason;
+	
+	@CreationTimestamp
+	private LocalDateTime createdAt;
 }
