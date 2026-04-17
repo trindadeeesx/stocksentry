@@ -6,7 +6,9 @@ import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.PushSubscriptionRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.push.PushSubscribeRequest;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Subscription;
@@ -19,10 +21,10 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PushNotificationService {
 
     private final PushSubscriptionRepository subscriptionRepository;
-    private final SecurityUtils securityUtils;
 
     @Value("${vapid.public-key}")
     private String vapidPublicKey;
@@ -33,9 +35,18 @@ public class PushNotificationService {
     @Value("${vapid.subject}")
     private String vapidSubject;
 
-    public void subscribe(PushSubscribeRequest request) {
-        Tenant tenant = securityUtils.getCurrentUser().getTenant();
+    private PushService pushService;
 
+    @PostConstruct
+    public void init() {
+        try {
+            this.pushService = new PushService(vapidPublicKey, vapidPrivateKey, vapidSubject);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize PushService", e);
+        }
+    }
+
+    public void subscribe(PushSubscribeRequest request) {
         subscriptionRepository.findByEndpoint(request.getEndpoint())
                 .ifPresentOrElse(
                         existing -> {
@@ -46,7 +57,6 @@ public class PushNotificationService {
                         },
                         () -> subscriptionRepository.save(
                                 PushSubscription.builder()
-                                        .tenant(tenant)
                                         .endpoint(request.getEndpoint())
                                         .p256dh(request.getP256dh())
                                         .authKey(request.getAuth())
@@ -70,16 +80,12 @@ public class PushNotificationService {
     public void sendToAllDevices(UUID tenantId, String title, String body) {
         List<PushSubscription> subscriptions = subscriptionRepository.findAllByTenantId(tenantId);
 
-        PushService pushService;
-        try {
-            pushService = new PushService(vapidPublicKey, vapidPrivateKey, vapidSubject);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize PushService", e);
+        if (subscriptions.isEmpty()) {
+            log.debug("No push subscriptions registered, skipping notifications.");
+            return;
         }
 
-        String payload = """
-                {"title":"%s","body":"%s"}
-                """.formatted(title, body);
+        String payload = "{\"title\":\"%s\",\"body\":\"%s\"}".formatted(title, body);
 
         for (PushSubscription sub : subscriptions) {
             try {
@@ -89,8 +95,7 @@ public class PushNotificationService {
                 );
                 pushService.send(new Notification(subscription, payload));
             } catch (Exception e) {
-                // log e continua pros outros dispositivos
-                System.out.println("Falha ao enviar push para " + sub.getEndpoint() + ": " + e.getMessage());
+                log.warn("Failed to send push notifications to {}: {}", sub.getEndpoint(), e.getMessage());
             }
         }
     }

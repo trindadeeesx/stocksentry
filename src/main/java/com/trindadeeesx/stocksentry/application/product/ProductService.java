@@ -2,7 +2,6 @@ package com.trindadeeesx.stocksentry.application.product;
 
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
-import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import lombok.RequiredArgsConstructor;
@@ -19,20 +18,17 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class ProductService {
+
     private final ProductRepository productRepository;
-    private final SecurityUtils securityUtils;
 
     @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public ProductResponse create(ProductRequest request) {
-        UUID tenantId = securityUtils.getCurrentTenantId();
-
-        if (productRepository.existsByTenantIdAndSku(tenantId, request.getSku())) {
-            throw new IllegalArgumentException("SKU already exists for this tenant");
+        if (productRepository.existsBySku(request.getSku())) {
+            throw new IllegalArgumentException("SKU already exists");
         }
 
         Product product = productRepository.save(
                 Product.builder()
-                        .tenant(securityUtils.getCurrentUser().getTenant())
                         .name(request.getName())
                         .sku(request.getSku())
                         .unit(request.getUnit())
@@ -46,9 +42,7 @@ public class ProductService {
     }
 
     public Page<ProductResponse> findAll(Pageable pageable) {
-        UUID tenantId = securityUtils.getCurrentTenantId();
-        return productRepository.findAllByTenantIdAndActiveTrue(tenantId, pageable)
-                .map(this::toResponse);
+        return productRepository.findAllByActiveTrue(pageable).map(this::toResponse);
     }
 
     public ProductResponse findById(UUID id) {
@@ -59,10 +53,8 @@ public class ProductService {
     public ProductResponse update(UUID id, ProductRequest request) {
         Product product = getProduct(id);
 
-        UUID tenantId = securityUtils.getCurrentTenantId();
-        if (!request.getSku().equals(product.getSku()) &&
-                productRepository.existsByTenantIdAndSku(tenantId, request.getSku())) {
-            throw new IllegalArgumentException("SKU already exists for this tenant");
+        if (!request.getSku().equals(product.getSku()) && productRepository.existsBySku(request.getSku())) {
+            throw new IllegalArgumentException("SKU already exists");
         }
 
         product.setName(request.getName());
@@ -82,26 +74,21 @@ public class ProductService {
 
     @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public void hardDelete(UUID id) {
-        Product product = getProduct(id);
-        productRepository.delete(product);
+        productRepository.delete(getProduct(id));
     }
 
     @Cacheable(value = "critical-products", key = "'critical'")
     public List<ProductResponse> findCritical() {
-        return productRepository.findCriticalByTenantId(securityUtils.getCurrentTenantId())
-                .stream().map(this::toResponse).toList();
+        return productRepository.findCritical().stream().map(this::toResponse).toList();
     }
 
     @Cacheable(value = "critical-products", key = "'out-of-stock'")
     public List<ProductResponse> findOutOfStock() {
-        return productRepository.findOutOfStockByTenantId(securityUtils.getCurrentTenantId())
-                .stream().map(this::toResponse).toList();
+        return productRepository.findOutOfStock().stream().map(this::toResponse).toList();
     }
 
     public Product getProduct(UUID id) {
-        UUID tenantId = securityUtils.getCurrentTenantId();
         return productRepository.findById(id)
-                .filter(p -> p.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
     }
 

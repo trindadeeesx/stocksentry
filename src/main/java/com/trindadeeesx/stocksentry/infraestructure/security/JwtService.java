@@ -15,6 +15,7 @@ import java.util.UUID;
 
 @Service
 public class JwtService {
+
     @Value("${security.jwt.secret}")
     private String secret;
 
@@ -28,8 +29,6 @@ public class JwtService {
     public String generateToken(User user) {
         return Jwts.builder()
                 .subject(user.getEmail())
-                .claim("tenantId", user.getTenant().getId().toString())
-                .claim("role", user.getRole().name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -38,10 +37,6 @@ public class JwtService {
 
     public String extractEmail(String token) {
         return getClaims(token).getSubject();
-    }
-
-    public UUID extractTenantId(String token) {
-        return UUID.fromString(getClaims(token).get("tenantId", String.class));
     }
 
     public boolean isTokenValid(String token) {

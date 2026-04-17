@@ -23,8 +23,8 @@ import java.util.Optional;
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
+    
     private final AuthService authService;
-    private final UserRepository userRepository;
     private final SecurityUtils securityUtils;
 
     @PostMapping("/login")
@@ -40,20 +40,13 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me() {
-        User u = userRepository.findById(securityUtils.getCurrentUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
+        User user = securityUtils.getCurrentUser();
         return ResponseEntity.ok(Map.of(
                 "user", Map.of(
-                        "id", u.getId(),
-                        "name", u.getName(),
-                        "email", u.getEmail(),
-                        "role", u.getRole(),
-                        "tenant", Map.of(
-                                "id", u.getTenant().getId(),
-                                "name", u.getTenant().getName(),
-                                "slug", u.getTenant().getSlug()
-                        )
+                        "id", user.getId(),
+                        "name", user.getName(),
+                        "email", user.getEmail(),
+                        "role", user.getRole()
                 )
         ));
     }

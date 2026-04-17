@@ -19,10 +19,6 @@ public class AlertConfig {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
-    private Tenant tenant;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private AlertType type;

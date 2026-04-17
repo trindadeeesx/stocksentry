@@ -10,9 +10,6 @@ import java.util.UUID;
 
 @Repository
 public interface PushSubscriptionRepository extends JpaRepository<PushSubscription, UUID> {
-    List<PushSubscription> findAllByTenantId(UUID tenantId);
-
     Optional<PushSubscription> findByEndpoint(String endpoint);
-
     void deleteByEndpoint(String endpoint);
 }

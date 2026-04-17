@@ -20,10 +20,6 @@ public class PushSubscription {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
-    private Tenant tenant;
-
     @Column(nullable = false, unique = true, columnDefinition = "TEXT")
     private String endpoint;
 
