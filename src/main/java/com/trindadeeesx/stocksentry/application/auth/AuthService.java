@@ -1,12 +1,9 @@
 package com.trindadeeesx.stocksentry.application.auth;
 
-import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import com.trindadeeesx.stocksentry.domain.user.User;
 import com.trindadeeesx.stocksentry.domain.user.UserRole;
-import com.trindadeeesx.stocksentry.infraestructure.persistence.TenantRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.UserRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.JwtService;
-import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.AuthResponse;
 import com.trindadeeesx.stocksentry.web.dto.LoginRequest;
 import com.trindadeeesx.stocksentry.web.dto.RegisterRequest;
@@ -57,7 +54,6 @@ public class AuthService {
                 .token(jwtService.generateToken(user))
                 .email(user.getEmail())
                 .role(user.getRole().name())
-                .tenantId(user.getTenant().getId())
                 .build();
     }
 }
