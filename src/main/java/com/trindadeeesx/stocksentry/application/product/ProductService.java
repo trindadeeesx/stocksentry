@@ -80,6 +80,12 @@ public class ProductService {
         productRepository.save(product);
     }
 
+    @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
+    public void hardDelete(UUID id) {
+        Product product = getProduct(id);
+        productRepository.delete(product);
+    }
+
     @Cacheable(value = "critical-products", key = "'critical'")
     public List<ProductResponse> findCritical() {
         return productRepository.findCriticalByTenantId(securityUtils.getCurrentTenantId())

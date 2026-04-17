@@ -4,6 +4,7 @@ import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -44,6 +45,8 @@ public class Product {
     @Column(nullable = false, precision = 10, scale = 3)
     private BigDecimal minStock = BigDecimal.ZERO;
 
+    private LocalDateTime lastAlert = null;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -53,4 +56,5 @@ public class Product {
     public boolean isBelowMinStock() {
         return currentStock.compareTo(minStock) < 0;
     }
+
 }

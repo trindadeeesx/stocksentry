@@ -9,6 +9,7 @@ import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
+import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
@@ -25,6 +26,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AlertService {
+    private static final int COOLDOWN_MINUTES = 30;
+
     private final AlertConfigRepository alertConfigRepository;
     private final AlertRepository alertRepository;
     private final SecurityUtils securityUtils;
@@ -33,13 +36,14 @@ public class AlertService {
 
     @Value("${resend.from}")
     private String from;
+    private final ProductRepository productRepository;
 
     public AlertConfigResponse createConfig(AlertConfigRequest request) {
         AlertConfig config = alertConfigRepository.save(
                 AlertConfig.builder()
                         .tenant(securityUtils.getCurrentUser().getTenant())
                         .type(request.getType())
-                        .destination(request.getDestination())
+                        .destination(request.getDestination() != null ? request.getDestination() : "")
                         .active(true)
                         .build()
         );
@@ -67,12 +71,16 @@ public class AlertService {
 
     @Async
     public void processStockAlert(Product product) {
-        if (alertRepository.existsByProductIdAndStatus(product.getId(), AlertStatus.SENT)) {
+        if (!shouldDispatch(product)) {
             return;
         }
 
         List<AlertConfig> configs = alertConfigRepository
                 .findAllByTenantIdAndActiveTrue(product.getTenant().getId());
+
+        if (configs.isEmpty()) {
+            return;
+        }
 
         for (AlertConfig config : configs) {
             AlertStatus status = AlertStatus.FAILED;
@@ -101,6 +109,30 @@ public class AlertService {
                             .build()
             );
         }
+
+        product.setLastAlert(LocalDateTime.now());
+        productRepository.save(product);
+    }
+
+    /**
+     * regra de disparo
+     * - primeira vez abaixo do minimo (lastAlert == null) -> dispara
+     * - ja abaixo, sem cooldown, não dispara
+     * - ja abaixo, cooldown expirado (30 min) -> dispara
+     */
+    private boolean shouldDispatch(Product product) {
+        if (product.getLastAlert() == null) {
+            return true;
+        }
+
+        return product.getLastAlert()
+                .plusMinutes(COOLDOWN_MINUTES)
+                .isBefore(LocalDateTime.now());
+    }
+
+    public void resetAlert(Product product) {
+        product.setLastAlert(null);
+        productRepository.save(product);
     }
 
     private void sendEmail(String destination, Product product) throws Exception {
