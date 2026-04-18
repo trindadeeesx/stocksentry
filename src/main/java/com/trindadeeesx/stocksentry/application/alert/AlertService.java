@@ -61,7 +61,7 @@ public class AlertService {
 	}
 	
 	public List<AlertResponse> findAlertHistory() {
-		return alertRepository
+		return alertRepository.findAllByOrderByTriggeredAtDesc()
 			.stream().map(this::toAlertResponse).toList();
 	}
 	
