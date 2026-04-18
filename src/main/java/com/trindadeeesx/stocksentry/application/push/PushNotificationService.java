@@ -10,10 +10,12 @@ import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Subscription;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.security.Security;
 import java.util.List;
 
 @Service
@@ -36,6 +38,9 @@ public class PushNotificationService {
 	
 	@PostConstruct
 	public void init() {
+		if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+			Security.addProvider(new BouncyCastleProvider());
+		}
 		try {
 			this.pushService = new PushService(vapidPublicKey, vapidPrivateKey, vapidSubject);
 		} catch (Exception e) {
