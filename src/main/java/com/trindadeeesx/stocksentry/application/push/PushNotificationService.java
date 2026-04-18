@@ -15,7 +15,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -75,7 +74,7 @@ public class PushNotificationService {
 	}
 	
 	@Async
-	public void sendToAllDevices(UUID tenantId, String title, String body) {
+	public void sendToAllDevices(String title, String body) {
 		List<PushSubscription> subscriptions = subscriptionRepository.findAll();
 		
 		if (subscriptions.isEmpty()) {
