@@ -5,11 +5,14 @@ import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -17,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Validated
 @RestController
 @RequestMapping("/api/v1/alerts")
 @RequiredArgsConstructor
@@ -47,7 +51,8 @@ public class AlertController {
 	}
 	
 	@GetMapping("/recent")
-	public List<AlertResponse> recent(@RequestParam(defaultValue = "5") int limit) {
+	public List<AlertResponse> recent(
+		@RequestParam(defaultValue = "5") @Min(1) @Max(50) int limit) {
 		return alertService.findRecentAlerts(limit);
 	}
 	
