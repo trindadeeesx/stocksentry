@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.application.product;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
+import com.trindadeeesx.stocksentry.web.dto.product.ProductStatsResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -45,6 +46,14 @@ public class ProductService {
 		return productRepository.findOutOfStock().stream().map(this::toResponse).toList();
 	}
 	
+	public ProductStatsResponse getStats() {
+		return ProductStatsResponse.builder()
+			.totalActive(productRepository.countByActiveTrue())
+			.totalCritical(productRepository.countCritical())
+			.totalOutOfStock(productRepository.countOutOfStock())
+			.build();
+	}
+
 	public Product getProduct(UUID id) {
 		return productRepository.findById(id)
 			.orElseThrow(() -> new IllegalArgumentException("Product not found"));

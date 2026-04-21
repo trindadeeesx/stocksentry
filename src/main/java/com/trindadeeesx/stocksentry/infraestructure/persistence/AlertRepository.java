@@ -15,4 +15,5 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
 	Page<Alert> findAllByOrderByTriggeredAtDesc(Pageable pageable);
 	
 	List<Alert> findByTriggeredAtAfter(LocalDateTime since);
+	
 }

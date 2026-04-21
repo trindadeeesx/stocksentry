@@ -46,6 +46,11 @@ public class AlertController {
 		return alertService.findAlertHistory(pageable);
 	}
 	
+	@GetMapping("/recent")
+	public List<AlertResponse> recent(@RequestParam(defaultValue = "5") int limit) {
+		return alertService.findRecentAlerts(limit);
+	}
+	
 	@PostMapping("/report")
 	public ResponseEntity<Map<String, Object>> triggerReport(
 		@RequestParam(defaultValue = "7") int days) {

@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.web.controller;
 import com.trindadeeesx.stocksentry.application.product.ProductService;
 import com.trindadeeesx.stocksentry.web.dto.product.MinStockRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
+import com.trindadeeesx.stocksentry.web.dto.product.ProductStatsResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -43,5 +44,10 @@ public class ProductController {
 	@GetMapping("/out-of-stock")
 	public List<ProductResponse> outOfStock() {
 		return productService.findOutOfStock();
+	}
+	
+	@GetMapping("/stats")
+	public ProductStatsResponse stats() {
+		return productService.getStats();
 	}
 }

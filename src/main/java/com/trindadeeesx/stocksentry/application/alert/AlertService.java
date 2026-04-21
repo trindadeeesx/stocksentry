@@ -72,6 +72,13 @@ public class AlertService {
 		return alertRepository.findAllByOrderByTriggeredAtDesc(pageable).map(this::toAlertResponse);
 	}
 	
+	public List<AlertResponse> findRecentAlerts(int limit) {
+		return alertRepository.findAllByOrderByTriggeredAtDesc(Pageable.ofSize(limit))
+			.stream()
+			.map(this::toAlertResponse)
+			.toList();
+	}
+	
 	@Scheduled(cron = "0 0 8 * * MON")
 	public void sendWeeklyReport() {
 		sendReport(7);
