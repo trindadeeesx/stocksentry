@@ -6,6 +6,7 @@ import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
 import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
+import com.trindadeeesx.stocksentry.domain.alert.AlertType;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
@@ -16,12 +17,19 @@ import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -60,21 +68,74 @@ public class AlertService {
 		alertConfigRepository.save(config);
 	}
 	
-	public List<AlertResponse> findAlertHistory() {
-		return alertRepository.findAllByOrderByTriggeredAtDesc()
-			.stream().map(this::toAlertResponse).toList();
+	public Page<AlertResponse> findAlertHistory(Pageable pageable) {
+		return alertRepository.findAllByOrderByTriggeredAtDesc(pageable).map(this::toAlertResponse);
+	}
+	
+	@Scheduled(cron = "0 0 8 * * MON")
+	public void sendWeeklyReport() {
+		sendReport(7);
+	}
+	
+	@Scheduled(cron = "0 0 8 1 * *")
+	public void sendMonthlyReport() {
+		sendReport(30);
+	}
+	
+	public void sendReport(int days) {
+		LocalDateTime since = LocalDateTime.now().minusDays(days);
+		List<Alert> alerts = alertRepository.findByTriggeredAtAfter(since);
+		List<Product> currentCritical = productRepository.findCritical();
+		
+		List<AlertConfig> emailConfigs = alertConfigRepository.findAllByActiveTrue().stream()
+			.filter(c -> c.getType() == AlertType.EMAIL)
+			.toList();
+		
+		if (emailConfigs.isEmpty()) {
+			log.warn("No email configs found, skipping report.");
+			return;
+		}
+		
+		String subject = days <= 7
+			? "📊 Relatório Semanal Meiliy - Alertas de Estoque"
+			: "📊 Relatório Mensal Meiliy - Alertas de Estoque";
+		String html = buildReportHtml(days, since, alerts, currentCritical);
+		
+		for (AlertConfig config : emailConfigs) {
+			if (config.getDestination().isBlank()) continue;
+			try {
+				resend.emails().send(CreateEmailOptions.builder()
+					.from(from)
+					.to(config.getDestination())
+					.subject(subject)
+					.html(html)
+					.build());
+				log.info("Report ({} days) sent to {}.", days, config.getDestination());
+			} catch (Exception e) {
+				log.error("Failed to send report to {}", config.getDestination(), e);
+			}
+		}
 	}
 	
 	@Async
-	public void processStockAlert(Product product) {
-		if (!shouldDispatch(product)) {
+	public void processStockAlert(List<Product> criticalProducts) {
+		if (criticalProducts.isEmpty()) return;
+		
+		List<Product> toAlert = criticalProducts.stream()
+			.filter(this::shouldDispatch)
+			.toList();
+		
+		if (toAlert.isEmpty()) {
+			log.debug("All critical products are within cooldown, skipping alert.");
 			return;
 		}
+		
+		log.debug("{} products are below min.", toAlert.size());
 		
 		List<AlertConfig> configs = alertConfigRepository.findAllByActiveTrue();
 		
 		if (configs.isEmpty()) {
-			log.debug("No alerts config found, skipping alert for product '{}'.", product.getName());
+			log.debug("No alerts config found, skipping alert.");
 			return;
 		}
 		
@@ -82,31 +143,40 @@ public class AlertService {
 			AlertStatus status = AlertStatus.FAILED;
 			try {
 				switch (config.getType()) {
-					case EMAIL -> sendEmail(config.getDestination(), product);
+					case EMAIL -> sendBatchEmail(config.getDestination(), toAlert);
 					case PUSH -> pushNotificationService.sendToAllDevices(
-						"⚠️ Estoque crítico: " + product.getName(),
-						"Atual: " + product.getCurrentStock() + " | Mínimo: " + product.getMinStock()
+						"⚠️ " + toAlert.size() + " produto(s) com estoque crítico!",
+						toAlert.stream()
+							.map(p -> p.getName() + ": " + p.getCurrentStock())
+							.limit(3)
+							.reduce("", (a, b) -> a.isEmpty() ? b : a + " | ") +
+							(toAlert.size() > 3 ? " e mais " + (toAlert.size() - 3) + "..." : "")
 					);
 				}
 				status = AlertStatus.SENT;
 			} catch (Exception e) {
-				log.error("Failed to dispatch alert of type {} for product '{}': {}",
-					config.getType(), product.getName(), e.getMessage());
+				log.error("Failed to dispatch {} alert", config.getType(), e);
 			}
 			
-			alertRepository.save(
-				Alert.builder()
+			AlertStatus finalStatus = status;
+			toAlert.forEach(product ->
+				alertRepository.save(Alert.builder()
 					.product(product)
 					.type(config.getType())
 					.destination(config.getDestination())
 					.triggeredAt(LocalDateTime.now())
-					.status(status)
-					.build()
+					.status(finalStatus)
+					.build())
 			);
 		}
 		
-		product.setLastAlert(LocalDateTime.now());
-		productRepository.save(product);
+		LocalDateTime now = LocalDateTime.now();
+		toAlert.forEach(product -> {
+			product.setLastAlert(now);
+			productRepository.save(product);
+		});
+		
+		log.info("Batch alert sent for {} product(s).", toAlert.size());
 	}
 	
 	public void resetAlert(Product product) {
@@ -125,32 +195,133 @@ public class AlertService {
 	}
 	
 	
-	private void sendEmail(String destination, Product product) throws Exception {
+	private void sendBatchEmail(String destination, List<Product> products) throws Exception {
+		if (destination == null || destination.isBlank()) {
+			throw new IllegalStateException("EMAIL alert config has no destination address configured");
+		}
 		CreateEmailOptions emailRequest = CreateEmailOptions.builder()
 			.from(from)
 			.to(destination)
-			.subject("⚠️ Estoque crítico: " + product.getName())
-			.html(buildEmailHtml(product))
+			.subject("⚠️ Estoque Meiliy - " + products.size() + " produto(s) com estoque crítico!")
+			.html(buildBatchEmailHtml(products))
 			.build();
 		
 		resend.emails().send(emailRequest);
 	}
 	
-	private String buildEmailHtml(Product product) {
+	private String buildReportHtml(int days, LocalDateTime since, List<Alert> alerts, List<Product> critical) {
+		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+		long sent = alerts.stream().filter(a -> a.getStatus() == AlertStatus.SENT).count();
+		long failed = alerts.size() - sent;
+		
+		Map<String, Long> byProduct = alerts.stream()
+			.collect(Collectors.groupingBy(a -> a.getProduct().getName(), Collectors.counting()));
+		
+		StringBuilder topRows = new StringBuilder();
+		byProduct.entrySet().stream()
+			.sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
+			.limit(10)
+			.forEach(e -> topRows.append("""
+				<tr>
+				  <td style="padding:6px 8px;border-bottom:1px solid #eee">%s</td>
+				  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%d</td>
+				</tr>
+				""".formatted(e.getKey(), e.getValue())));
+		
+		StringBuilder criticalRows = new StringBuilder();
+		critical.forEach(p -> criticalRows.append("""
+			<tr>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;color:#e53e3e"><strong>%s</strong></td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			</tr>
+			""".formatted(p.getName(), p.getSku(), p.getCurrentStock(), p.getMinStock())));
+		
 		return """
-			<h2>Estoque crítico detectado</h2>
-			<p>O produto <strong>%s</strong> (SKU: %s) está abaixo do mínimo.</p>
-			<table>
-			  <tr><td>Estoque atual:</td><td><strong>%s %s</strong></td></tr>
-			  <tr><td>Estoque mínimo:</td><td><strong>%s %s</strong></td></tr>
-			</table>
-			<p>Acesse o sistema para reabastecer.</p>
+			<div style="font-family:sans-serif;max-width:700px;margin:0 auto;color:#333">
+			  <h2 style="color:#2d3748">📊 Relatório de Estoque — últimos %d dias</h2>
+			  <p style="color:#666">Período: %s até %s</p>
+			
+			  <h3 style="color:#2d3748;border-bottom:2px solid #eee;padding-bottom:4px">Resumo de alertas</h3>
+			  <table style="border-collapse:collapse;font-size:14px;margin-bottom:24px">
+			    <tr><td style="padding:4px 12px 4px 0">Total de alertas:</td><td><strong>%d</strong></td></tr>
+			    <tr><td style="padding:4px 12px 4px 0">Enviados com sucesso:</td><td style="color:#38a169"><strong>%d</strong></td></tr>
+			    <tr><td style="padding:4px 12px 4px 0">Falhos:</td><td style="color:#e53e3e"><strong>%d</strong></td></tr>
+			  </table>
+			
+			  %s
+			
+			  %s
+			
+			  <p style="margin-top:24px;color:#999;font-size:12px">Gerado automaticamente pelo StockSentry.</p>
+			</div>
 			""".formatted(
-			product.getName(),
-			product.getSku(),
-			product.getCurrentStock(), product.getUnit(),
-			product.getMinStock(), product.getUnit()
+			days,
+			since.format(fmt), LocalDateTime.now().format(fmt),
+			alerts.size(), sent, failed,
+			topRows.isEmpty() ? "" : """
+				<h3 style="color:#2d3748;border-bottom:2px solid #eee;padding-bottom:4px">Produtos com mais alertas no período</h3>
+				<table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
+				  <thead><tr style="background:#f7f7f7">
+				    <th style="padding:8px;text-align:left">Produto</th>
+				    <th style="padding:8px">Alertas</th>
+				  </tr></thead>
+				  <tbody>%s</tbody>
+				</table>
+				""".formatted(topRows),
+			critical.isEmpty() ? "<p style=\"color:#38a169\">✅ Nenhum produto crítico no momento.</p>" : """
+				<h3 style="color:#e53e3e;border-bottom:2px solid #eee;padding-bottom:4px">⚠️ Produtos críticos agora (%d)</h3>
+				<table style="width:100%%;border-collapse:collapse;font-size:14px">
+				  <thead><tr style="background:#f7f7f7">
+				    <th style="padding:8px;text-align:left">Produto</th>
+				    <th style="padding:8px">SKU</th>
+				    <th style="padding:8px">Estoque atual</th>
+				    <th style="padding:8px">Mínimo</th>
+				  </tr></thead>
+				  <tbody>%s</tbody>
+				</table>
+				""".formatted(critical.size(), criticalRows)
 		);
+	}
+	
+	private String buildBatchEmailHtml(List<Product> products) {
+		StringBuilder rows = new StringBuilder();
+		for (Product p : products) {
+			rows.append("""
+				<tr>
+				  <td style="padding:8px;border-bottom:1px solid #eee">%s</td>
+				  <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+				  <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#e53e3e"><strong>%s %s</strong></td>
+				  <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">%s %s</td>
+				</tr>
+				""".formatted(
+				p.getName(), p.getSku(),
+				p.getCurrentStock(), p.getUnit(),
+				p.getMinStock(), p.getUnit()
+			));
+		}
+		
+		return """
+			<div style="font-family:sans-serif;max-width:900px;margin:0 auto">
+			  <h2 style="color:#e53e3e">⚠️ Estoque crítico detectado</h2>
+			  <p>Os seguintes produtos estão abaixo do estoque mínimo:</p>
+			  <table style="width:100%%;border-collapse:collapse;font-size:14px">
+			    <thead>
+			      <tr style="background:#f7f7f7">
+			        <th style="padding:8px;text-align:left">Produto</th>
+			        <th style="padding:8px">SKU</th>
+			        <th style="padding:8px">Estoque atual</th>
+			        <th style="padding:8px">Mínimo</th>
+			      </tr>
+			    </thead>
+			    <tbody>%s</tbody>
+			  </table>
+			  <p style="margin-top:20px;color:#666;font-size:13px">
+			    Próximo alerta em 30 minutos se os estoques não forem repostos.
+			  </p>
+			</div>
+			""".formatted(rows);
 	}
 	
 	private AlertConfigResponse toConfigResponse(AlertConfig c) {
