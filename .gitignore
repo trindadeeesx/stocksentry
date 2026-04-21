@@ -5,8 +5,12 @@ target/
 !**/src/test/**/target/
 
 application-*.yml
+application-*.yaml
 !application.yml
-!application-prod.yml
+!application-prod.yaml
+
+repomix-*.xml
+tree.xml
 
 ### STS ###
 .apt_generated
