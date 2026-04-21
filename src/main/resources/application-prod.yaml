@@ -1,0 +1,49 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    url: ${SPRING_DATASOURCE_URL}
+    user: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+pdv:
+  datasource:
+    url: ${PDV_DATASOURCE_URL}
+    username: ${PDV_DATASOURCE_USERNAME}
+    password: ${PDV_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: ${JWT_EXPIRATION:86400000}
+
+resend:
+  api-key: ${RESEND_API_KEY}
+  from: ${RESEND_FROM}
+
+vapid:
+  public-key: ${VAPID_PUBLIC_KEY}
+  private-key: ${VAPID_PRIVATE_KEY}
+  subject: ${VAPID_SUBJECT}
+
+scheduler:
+  sync-interval-ms: ${SCHEDULER_INTERVAL_MS:300000}
