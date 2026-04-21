@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @Service
@@ -56,7 +57,7 @@ public class ProductService {
 
 	public Product getProduct(UUID id) {
 		return productRepository.findById(id)
-			.orElseThrow(() -> new IllegalArgumentException("Product not found"));
+			.orElseThrow(() -> new NoSuchElementException("Product not found"));
 	}
 	
 	private ProductResponse toResponse(Product product) {
