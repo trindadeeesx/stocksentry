@@ -46,6 +46,6 @@ public class Product {
 	private LocalDateTime createdAt;
 	
 	public boolean isBelowMinStock() {
-		return currentStock.compareTo(minStock) < 0;
+		return currentStock.compareTo(minStock) <= 0;
 	}
 }
