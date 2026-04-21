@@ -1,13 +1,12 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
 import com.trindadeeesx.stocksentry.application.product.ProductService;
-import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
+import com.trindadeeesx.stocksentry.web.dto.product.MinStockRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,14 +16,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
 public class ProductController {
-	
+
 	private final ProductService productService;
-	
-	@PostMapping
-	@ResponseStatus(HttpStatus.CREATED)
-	public ProductResponse create(@RequestBody @Valid ProductRequest request) {
-		return productService.create(request);
-	}
 	
 	@GetMapping
 	public Page<ProductResponse> findAll(Pageable pageable) {
@@ -36,22 +29,10 @@ public class ProductController {
 		return productService.findById(id);
 	}
 	
-	@PutMapping("/{id}")
-	public ProductResponse update(@PathVariable UUID id,
-	                              @RequestBody @Valid ProductRequest request) {
-		return productService.update(id, request);
-	}
-	
-	@DeleteMapping("/{id}")
-	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void delete(@PathVariable UUID id) {
-		productService.delete(id);
-	}
-	
-	@DeleteMapping("/{id}/hard")
-	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void hardDelete(@PathVariable UUID id) {
-		productService.hardDelete(id);
+	@PatchMapping("/{id}/min-stock")
+	public ProductResponse updateMinStock(@PathVariable UUID id,
+	                                      @RequestBody @Valid MinStockRequest request) {
+		return productService.updateMinStock(id, request.getMinStock());
 	}
 	
 	@GetMapping("/critical")

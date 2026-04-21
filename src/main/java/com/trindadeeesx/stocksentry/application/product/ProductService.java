@@ -2,7 +2,6 @@ package com.trindadeeesx.stocksentry.application.product;
 
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
-import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -18,29 +17,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class ProductService {
-	
+
 	private final ProductRepository productRepository;
-	
-	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
-	public ProductResponse create(ProductRequest request) {
-		if (productRepository.existsBySku(request.getSku())) {
-			throw new IllegalArgumentException("SKU already exists");
-		}
-		
-		Product product = productRepository.save(
-			Product.builder()
-				.name(request.getName())
-				.sku(request.getSku())
-				.unit(request.getUnit())
-				.currentStock(BigDecimal.ZERO)
-				.minStock(request.getMinStock())
-				.active(true)
-				.build()
-		);
-		
-		return toResponse(product);
-	}
-	
+
 	public Page<ProductResponse> findAll(Pageable pageable) {
 		return productRepository.findAllByActiveTrue(pageable).map(this::toResponse);
 	}
@@ -50,31 +29,10 @@ public class ProductService {
 	}
 	
 	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
-	public ProductResponse update(UUID id, ProductRequest request) {
+	public ProductResponse updateMinStock(UUID id, BigDecimal minStock) {
 		Product product = getProduct(id);
-		
-		if (!request.getSku().equals(product.getSku()) && productRepository.existsBySku(request.getSku())) {
-			throw new IllegalArgumentException("SKU already exists");
-		}
-		
-		product.setName(request.getName());
-		product.setSku(request.getSku());
-		product.setUnit(request.getUnit());
-		product.setMinStock(request.getMinStock());
-		
+		product.setMinStock(minStock);
 		return toResponse(productRepository.save(product));
-	}
-	
-	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
-	public void delete(UUID id) {
-		Product product = getProduct(id);
-		product.setActive(false);
-		productRepository.save(product);
-	}
-	
-	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
-	public void hardDelete(UUID id) {
-		productRepository.delete(getProduct(id));
 	}
 	
 	@Cacheable(value = "critical-products", key = "'critical'")

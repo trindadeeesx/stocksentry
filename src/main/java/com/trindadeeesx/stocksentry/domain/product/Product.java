@@ -35,7 +35,7 @@ public class Product {
 	private BigDecimal currentStock = BigDecimal.ZERO;
 	
 	@Column(nullable = false, precision = 10, scale = 3)
-	private BigDecimal minStock = BigDecimal.ZERO;
+	private BigDecimal minStock = BigDecimal.TEN;
 	
 	private LocalDateTime lastAlert = null;
 	
