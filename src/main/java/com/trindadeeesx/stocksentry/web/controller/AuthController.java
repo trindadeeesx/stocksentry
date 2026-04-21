@@ -29,8 +29,10 @@ public class AuthController {
 	
 	@PostMapping("/register")
 	@ResponseStatus(HttpStatus.CREATED)
-	public AuthResponse register(@RequestBody @Valid RegisterRequest request) {
-		return authService.register(request);
+	public AuthResponse register(
+		@RequestHeader("X-Register-Key") String registerKey,
+		@RequestBody @Valid RegisterRequest request) {
+		return authService.register(registerKey, request);
 	}
 	
 	@GetMapping("/me")

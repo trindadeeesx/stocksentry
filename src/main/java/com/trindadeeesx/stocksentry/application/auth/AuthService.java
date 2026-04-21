@@ -8,7 +8,9 @@ import com.trindadeeesx.stocksentry.web.dto.AuthResponse;
 import com.trindadeeesx.stocksentry.web.dto.LoginRequest;
 import com.trindadeeesx.stocksentry.web.dto.RegisterRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,8 +22,14 @@ public class AuthService {
 	private final PasswordEncoder passwordEncoder;
 	private final JwtService jwtService;
 	private final AuthenticationManager authenticationManager;
-	
-	public AuthResponse register(RegisterRequest request) {
+
+	@Value("${security.register-key:}")
+	private String registerKey;
+
+	public AuthResponse register(String providedKey, RegisterRequest request) {
+		if (registerKey.isBlank() || !registerKey.equals(providedKey)) {
+			throw new BadCredentialsException("Invalid register key");
+		}
 		if (userRepository.existsByEmail(request.getEmail())) {
 			throw new IllegalArgumentException("Email already in use");
 		}
