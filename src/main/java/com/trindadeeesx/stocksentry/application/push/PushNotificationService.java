@@ -5,6 +5,7 @@ import com.trindadeeesx.stocksentry.domain.push.VapidPublicKeyResponse;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.PushSubscriptionRepository;
 import com.trindadeeesx.stocksentry.web.dto.push.PushSubscribeRequest;
 import jakarta.annotation.PostConstruct;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
@@ -71,6 +72,7 @@ public class PushNotificationService {
 			);
 	}
 	
+	@Transactional
 	public void unsubscribe(String endpoint) {
 		subscriptionRepository.deleteByEndpoint(endpoint);
 	}
