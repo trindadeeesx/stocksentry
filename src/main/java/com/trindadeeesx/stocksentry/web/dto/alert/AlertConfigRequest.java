@@ -11,7 +11,7 @@ public class AlertConfigRequest {
 	@NotNull
 	private AlertType type;
 
-	@Email
+	@Email(regexp = "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", message = "must be a valid email address or empty")
 	@Size(max = 150)
 	private String destination;
 }
