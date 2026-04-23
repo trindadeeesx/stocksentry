@@ -47,10 +47,16 @@ public class AlertService {
 	private String from;
 	
 	public AlertConfigResponse createConfig(AlertConfigRequest request) {
+		if (request.getType() == AlertType.EMAIL) {
+			String dest = request.getDestination();
+			if (dest == null || dest.isBlank() || !dest.contains("@")) {
+				throw new IllegalArgumentException("EMAIL alert config requires a valid destination email address");
+			}
+		}
 		AlertConfig config = alertConfigRepository.save(
 			AlertConfig.builder()
 				.type(request.getType())
-				.destination(request.getDestination() != null ? request.getDestination() : "")
+				.destination(request.getType() == AlertType.PUSH ? "" : request.getDestination().trim())
 				.active(true)
 				.build()
 		);
