@@ -30,7 +30,7 @@ public class ProductService {
 		return toResponse(getProduct(id));
 	}
 	
-	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
+	@CacheEvict(value = {"products", "critical-products", "out-of-stock-products"}, allEntries = true)
 	public ProductResponse updateMinStock(UUID id, BigDecimal minStock) {
 		Product product = getProduct(id);
 		product.setMinStock(minStock);

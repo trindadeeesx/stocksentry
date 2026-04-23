@@ -64,7 +64,7 @@ public class StockSyncScheduler {
 	}
 
 	@Transactional
-	@CacheEvict(value = {"products", "critical-products"}, allEntries = true)
+	@CacheEvict(value = {"products", "critical-products", "out-of-stock-products"}, allEntries = true)
 	public void sync() {
 		if (!syncRunning.compareAndSet(false, true)) {
 			log.warn("Sync already in progress, skipping.");

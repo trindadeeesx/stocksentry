@@ -19,17 +19,17 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 	
 	Page<Product> findAllByActiveTrue(Pageable pageable);
 	
-	@Query("SELECT p FROM Product p WHERE p.currentStock <= p.minStock AND p.active = true")
+	@Query("SELECT p FROM Product p WHERE p.currentStock > 0 AND p.currentStock <= p.minStock AND p.active = true")
 	List<Product> findCritical();
 
-	@Query("SELECT p FROM Product p WHERE p.currentStock = 0 AND p.active = true")
+	@Query("SELECT p FROM Product p WHERE p.currentStock <= 0 AND p.active = true")
 	List<Product> findOutOfStock();
-	
+
 	long countByActiveTrue();
-	
-	@Query("SELECT COUNT(p) FROM Product p WHERE p.currentStock <= p.minStock AND p.active = true")
+
+	@Query("SELECT COUNT(p) FROM Product p WHERE p.currentStock > 0 AND p.currentStock <= p.minStock AND p.active = true")
 	long countCritical();
-	
-	@Query("SELECT COUNT(p) FROM Product p WHERE p.currentStock = 0 AND p.active = true")
+
+	@Query("SELECT COUNT(p) FROM Product p WHERE p.currentStock <= 0 AND p.active = true")
 	long countOutOfStock();
 }
