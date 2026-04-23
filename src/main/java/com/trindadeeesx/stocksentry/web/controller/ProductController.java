@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,6 +32,7 @@ public class ProductController {
 	}
 	
 	@PatchMapping("/{id}/min-stock")
+	@PreAuthorize("hasRole('ADMIN')")
 	public ProductResponse updateMinStock(@PathVariable UUID id,
 	                                      @RequestBody @Valid MinStockRequest request) {
 		return productService.updateMinStock(id, request.getMinStock());

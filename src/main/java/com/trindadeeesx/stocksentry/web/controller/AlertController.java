@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,17 +31,20 @@ public class AlertController {
 
 	@PostMapping("/config")
 	@ResponseStatus(HttpStatus.CREATED)
+	@PreAuthorize("hasRole('ADMIN')")
 	public AlertConfigResponse createConfig(@RequestBody @Valid AlertConfigRequest request) {
 		return alertService.createConfig(request);
 	}
-	
+
 	@GetMapping("/config")
+	@PreAuthorize("hasRole('ADMIN')")
 	public List<AlertConfigResponse> findConfigs() {
 		return alertService.findConfigs();
 	}
-	
+
 	@DeleteMapping("/config/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@PreAuthorize("hasRole('ADMIN')")
 	public void deleteConfig(@PathVariable UUID id) {
 		alertService.deleteConfig(id);
 	}
@@ -57,8 +61,9 @@ public class AlertController {
 	}
 	
 	@PostMapping("/report")
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Map<String, Object>> triggerReport(
-		@RequestParam(defaultValue = "7") int days) {
+		@RequestParam(defaultValue = "7") @Min(1) @Max(365) int days) {
 		alertService.sendReport(days);
 		return ResponseEntity.ok(Map.of(
 			"message", "Report triggered for last " + days + " days",

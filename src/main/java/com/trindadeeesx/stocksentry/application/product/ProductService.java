@@ -37,12 +37,12 @@ public class ProductService {
 		return toResponse(productRepository.save(product));
 	}
 	
-	@Cacheable(value = "critical-products", key = "'critical'")
+	@Cacheable("critical-products")
 	public List<ProductResponse> findCritical() {
 		return productRepository.findCritical().stream().map(this::toResponse).toList();
 	}
 	
-	@Cacheable(value = "critical-products", key = "'out-of-stock'")
+	@Cacheable("out-of-stock-products")
 	public List<ProductResponse> findOutOfStock() {
 		return productRepository.findOutOfStock().stream().map(this::toResponse).toList();
 	}

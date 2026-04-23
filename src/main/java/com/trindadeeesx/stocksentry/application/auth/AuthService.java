@@ -15,6 +15,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -27,7 +30,9 @@ public class AuthService {
 	private String registerKey;
 
 	public AuthResponse register(String providedKey, RegisterRequest request) {
-		if (registerKey.isBlank() || !registerKey.equals(providedKey)) {
+		if (registerKey.isBlank() || !MessageDigest.isEqual(
+				registerKey.getBytes(StandardCharsets.UTF_8),
+				providedKey.getBytes(StandardCharsets.UTF_8))) {
 			throw new BadCredentialsException("Invalid register key");
 		}
 		if (userRepository.existsByEmail(request.getEmail())) {
@@ -56,7 +61,8 @@ public class AuthService {
 			new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
 		);
 		
-		User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
+		User user = userRepository.findByEmail(request.getEmail())
+			.orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 		
 		return AuthResponse.builder()
 			.token(jwtService.generateToken(user))

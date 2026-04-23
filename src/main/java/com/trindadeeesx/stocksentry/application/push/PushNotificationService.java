@@ -12,11 +12,12 @@ import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Subscription;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.security.Security;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +26,8 @@ public class PushNotificationService {
 	
 	private final PushSubscriptionRepository subscriptionRepository;
 	
+	private final ObjectMapper objectMapper;
+
 	@Value("${vapid.public-key}")
 	private String vapidPublicKey;
 	
@@ -35,7 +38,7 @@ public class PushNotificationService {
 	private String vapidSubject;
 	
 	private PushService pushService;
-	
+
 	@PostConstruct
 	public void init() {
 		if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
@@ -78,7 +81,6 @@ public class PushNotificationService {
 			.build();
 	}
 	
-	@Async
 	public void sendToAllDevices(String title, String body) {
 		List<PushSubscription> subscriptions = subscriptionRepository.findAll();
 		
@@ -87,7 +89,13 @@ public class PushNotificationService {
 			return;
 		}
 		
-		String payload = "{\"title\":\"%s\",\"body\":\"%s\"}".formatted(title, body);
+		String payload;
+		try {
+			payload = objectMapper.writeValueAsString(Map.of("title", title, "body", body));
+		} catch (Exception e) {
+			log.error("Failed to build push payload", e);
+			return;
+		}
 		
 		for (PushSubscription sub : subscriptions) {
 			try {

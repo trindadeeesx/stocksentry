@@ -19,9 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -117,14 +117,13 @@ public class AlertService {
 					.subject(subject)
 					.html(html)
 					.build());
-				log.info("Report ({} days) sent to {}.", days, config.getDestination());
+				log.info("Report ({} days) sent to {}.", days, maskEmail(config.getDestination()));
 			} catch (Exception e) {
-				log.error("Failed to send report to {}", config.getDestination(), e);
+				log.error("Failed to send report to {}", maskEmail(config.getDestination()), e);
 			}
 		}
 	}
 	
-	@Async
 	public void processStockAlert(List<Product> criticalProducts) {
 		if (criticalProducts.isEmpty()) return;
 		
@@ -233,8 +232,8 @@ public class AlertService {
 				  <td style="padding:6px 8px;border-bottom:1px solid #eee">%s</td>
 				  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%d</td>
 				</tr>
-				""".formatted(e.getKey(), e.getValue())));
-		
+				""".formatted(HtmlUtils.htmlEscape(e.getKey()), e.getValue())));
+
 		StringBuilder criticalRows = new StringBuilder();
 		critical.forEach(p -> criticalRows.append("""
 			<tr>
@@ -243,7 +242,8 @@ public class AlertService {
 			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;color:#e53e3e"><strong>%s</strong></td>
 			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
 			</tr>
-			""".formatted(p.getName(), p.getSku(), p.getCurrentStock(), p.getMinStock())));
+			""".formatted(HtmlUtils.htmlEscape(p.getName()), HtmlUtils.htmlEscape(p.getSku()),
+				p.getCurrentStock(), p.getMinStock())));
 		
 		return """
 			<div style="font-family:sans-serif;max-width:700px;margin:0 auto;color:#333">
@@ -303,7 +303,7 @@ public class AlertService {
 				  <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">%s %s</td>
 				</tr>
 				""".formatted(
-				p.getName(), p.getSku(),
+				HtmlUtils.htmlEscape(p.getName()), HtmlUtils.htmlEscape(p.getSku()),
 				p.getCurrentStock(), p.getUnit(),
 				p.getMinStock(), p.getUnit()
 			));
@@ -331,6 +331,12 @@ public class AlertService {
 			""".formatted(rows);
 	}
 	
+	private String maskEmail(String email) {
+		int at = email.indexOf('@');
+		if (at <= 1) return "***";
+		return email.charAt(0) + "***" + email.substring(at);
+	}
+
 	private AlertConfigResponse toConfigResponse(AlertConfig c) {
 		return AlertConfigResponse.builder()
 			.id(c.getId())
