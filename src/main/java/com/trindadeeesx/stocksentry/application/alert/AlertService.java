@@ -3,6 +3,8 @@ package com.trindadeeesx.stocksentry.application.alert;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
+import com.trindadeeesx.stocksentry.application.sse.SseEmitterService;
+import com.trindadeeesx.stocksentry.infraestructure.persistence.PushSubscriptionRepository;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
 import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
@@ -42,6 +44,8 @@ public class AlertService {
 	private final ProductRepository productRepository;
 	private final Resend resend;
 	private final PushNotificationService pushNotificationService;
+	private final SseEmitterService sseEmitterService;
+	private final PushSubscriptionRepository pushSubscriptionRepository;
 	
 	@Value("${resend.from}")
 	private String from;
@@ -56,13 +60,14 @@ public class AlertService {
 		AlertConfig config = alertConfigRepository.save(
 			AlertConfig.builder()
 				.type(request.getType())
-				.destination(request.getType() == AlertType.PUSH ? "" : request.getDestination().trim())
+				.destination(request.getDestination() != null ? request.getDestination().trim() : "")
 				.active(true)
 				.build()
 		);
+		sseEmitterService.broadcast("config");
 		return toConfigResponse(config);
 	}
-	
+
 	public List<AlertConfigResponse> findConfigs() {
 		return alertConfigRepository.findAllByActiveTrue().stream().map(this::toConfigResponse).toList();
 	}
@@ -72,6 +77,12 @@ public class AlertService {
 			.orElseThrow(() -> new IllegalArgumentException("Config not found"));
 		config.setActive(false);
 		alertConfigRepository.save(config);
+		if (config.getType() == AlertType.PUSH) {
+			pushSubscriptionRepository.deleteAll(
+				pushSubscriptionRepository.findAllByDeviceName(config.getDestination())
+			);
+		}
+		sseEmitterService.broadcast("config");
 	}
 	
 	public Page<AlertResponse> findAlertHistory(Pageable pageable) {
@@ -99,20 +110,28 @@ public class AlertService {
 		LocalDateTime since = LocalDateTime.now().minusDays(days);
 		List<Alert> alerts = alertRepository.findByTriggeredAtAfter(since);
 		List<Product> currentCritical = productRepository.findCritical();
-		
+		List<Product> currentOutOfStock = productRepository.findOutOfStock();
+
+		// Produtos que foram alertados no período mas hoje estão normais (recuperados)
+		List<Product> recovered = alerts.stream()
+			.map(Alert::getProduct)
+			.distinct()
+			.filter(p -> p.getCurrentStock().compareTo(p.getMinStock()) > 0)
+			.toList();
+
 		List<AlertConfig> emailConfigs = alertConfigRepository.findAllByActiveTrue().stream()
 			.filter(c -> c.getType() == AlertType.EMAIL)
 			.toList();
-		
+
 		if (emailConfigs.isEmpty()) {
 			log.warn("No email configs found, skipping report.");
 			return;
 		}
-		
+
 		String subject = days <= 7
 			? "📊 Relatório Semanal Meiliy - Alertas de Estoque"
 			: "📊 Relatório Mensal Meiliy - Alertas de Estoque";
-		String html = buildReportHtml(days, since, alerts, currentCritical);
+		String html = buildReportHtml(days, since, alerts, currentCritical, currentOutOfStock, recovered);
 		
 		for (AlertConfig config : emailConfigs) {
 			if (config.getDestination().isBlank()) continue;
@@ -180,6 +199,7 @@ public class AlertService {
 					.status(finalStatus)
 					.build())
 			);
+			sseEmitterService.broadcast("alert");
 		}
 		
 		LocalDateTime now = LocalDateTime.now();
@@ -221,14 +241,16 @@ public class AlertService {
 		resend.emails().send(emailRequest);
 	}
 	
-	private String buildReportHtml(int days, LocalDateTime since, List<Alert> alerts, List<Product> critical) {
+	private String buildReportHtml(int days, LocalDateTime since, List<Alert> alerts,
+	                               List<Product> critical, List<Product> outOfStock,
+	                               List<Product> recovered) {
 		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 		long sent = alerts.stream().filter(a -> a.getStatus() == AlertStatus.SENT).count();
 		long failed = alerts.size() - sent;
-		
+
 		Map<String, Long> byProduct = alerts.stream()
 			.collect(Collectors.groupingBy(a -> a.getProduct().getName(), Collectors.counting()));
-		
+
 		StringBuilder topRows = new StringBuilder();
 		byProduct.entrySet().stream()
 			.sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
@@ -250,29 +272,86 @@ public class AlertService {
 			</tr>
 			""".formatted(HtmlUtils.htmlEscape(p.getName()), HtmlUtils.htmlEscape(p.getSku()),
 				p.getCurrentStock(), p.getMinStock())));
-		
+
+		StringBuilder outOfStockRows = new StringBuilder();
+		outOfStock.forEach(p -> outOfStockRows.append("""
+			<tr>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			</tr>
+			""".formatted(HtmlUtils.htmlEscape(p.getName()), HtmlUtils.htmlEscape(p.getSku()),
+				p.getUnit())));
+
+		StringBuilder recoveredRows = new StringBuilder();
+		recovered.forEach(p -> recoveredRows.append("""
+			<tr>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;color:#38a169"><strong>%s</strong></td>
+			  <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">%s</td>
+			</tr>
+			""".formatted(HtmlUtils.htmlEscape(p.getName()), HtmlUtils.htmlEscape(p.getSku()),
+				p.getCurrentStock(), p.getMinStock())));
+
+		String outOfStockSection = outOfStock.isEmpty()
+			? ""
+			: """
+			<h3 style="color:#744210;border-bottom:2px solid #eee;padding-bottom:4px">🚫 Produtos zerados agora (%d)</h3>
+			<table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
+			  <thead><tr style="background:#f7f7f7">
+			    <th style="padding:8px;text-align:left">Produto</th>
+			    <th style="padding:8px">SKU</th>
+			    <th style="padding:8px">Unidade</th>
+			  </tr></thead>
+			  <tbody>%s</tbody>
+			</table>
+			""".formatted(outOfStock.size(), outOfStockRows);
+
+		String recoveredSection = recovered.isEmpty()
+			? ""
+			: """
+			<h3 style="color:#276749;border-bottom:2px solid #eee;padding-bottom:4px">✅ Recuperados no período (%d)</h3>
+			<p style="color:#666;font-size:13px;margin-top:-8px">Foram alertados nos últimos %d dias e hoje estão acima do mínimo.</p>
+			<table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
+			  <thead><tr style="background:#f7f7f7">
+			    <th style="padding:8px;text-align:left">Produto</th>
+			    <th style="padding:8px">SKU</th>
+			    <th style="padding:8px">Estoque atual</th>
+			    <th style="padding:8px">Mínimo</th>
+			  </tr></thead>
+			  <tbody>%s</tbody>
+			</table>
+			""".formatted(recovered.size(), days, recoveredRows);
+
 		return """
 			<div style="font-family:sans-serif;max-width:700px;margin:0 auto;color:#333">
 			  <h2 style="color:#2d3748">📊 Relatório de Estoque — últimos %d dias</h2>
 			  <p style="color:#666">Período: %s até %s</p>
-			
+
 			  <h3 style="color:#2d3748;border-bottom:2px solid #eee;padding-bottom:4px">Resumo de alertas</h3>
 			  <table style="border-collapse:collapse;font-size:14px;margin-bottom:24px">
 			    <tr><td style="padding:4px 12px 4px 0">Total de alertas:</td><td><strong>%d</strong></td></tr>
 			    <tr><td style="padding:4px 12px 4px 0">Enviados com sucesso:</td><td style="color:#38a169"><strong>%d</strong></td></tr>
 			    <tr><td style="padding:4px 12px 4px 0">Falhos:</td><td style="color:#e53e3e"><strong>%d</strong></td></tr>
+			    <tr><td style="padding:4px 12px 4px 0">Produtos zerados agora:</td><td style="color:#744210"><strong>%d</strong></td></tr>
+			    <tr><td style="padding:4px 12px 4px 0">Recuperados no período:</td><td style="color:#38a169"><strong>%d</strong></td></tr>
 			  </table>
-			
+
 			  %s
-			
+
 			  %s
-			
+
+			  %s
+
+			  %s
+
 			  <p style="margin-top:24px;color:#999;font-size:12px">Gerado automaticamente pelo StockSentry.</p>
 			</div>
 			""".formatted(
 			days,
 			since.format(fmt), LocalDateTime.now().format(fmt),
-			alerts.size(), sent, failed,
+			alerts.size(), sent, failed, outOfStock.size(), recovered.size(),
 			topRows.isEmpty() ? "" : """
 				<h3 style="color:#2d3748;border-bottom:2px solid #eee;padding-bottom:4px">Produtos com mais alertas no período</h3>
 				<table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
@@ -285,7 +364,7 @@ public class AlertService {
 				""".formatted(topRows),
 			critical.isEmpty() ? "<p style=\"color:#38a169\">✅ Nenhum produto crítico no momento.</p>" : """
 				<h3 style="color:#e53e3e;border-bottom:2px solid #eee;padding-bottom:4px">⚠️ Produtos críticos agora (%d)</h3>
-				<table style="width:100%%;border-collapse:collapse;font-size:14px">
+				<table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
 				  <thead><tr style="background:#f7f7f7">
 				    <th style="padding:8px;text-align:left">Produto</th>
 				    <th style="padding:8px">SKU</th>
@@ -294,7 +373,9 @@ public class AlertService {
 				  </tr></thead>
 				  <tbody>%s</tbody>
 				</table>
-				""".formatted(critical.size(), criticalRows)
+				""".formatted(critical.size(), criticalRows),
+			outOfStockSection,
+			recoveredSection
 		);
 	}
 	
