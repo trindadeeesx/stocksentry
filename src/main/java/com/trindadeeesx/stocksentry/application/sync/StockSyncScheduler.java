@@ -2,6 +2,7 @@ package com.trindadeeesx.stocksentry.application.sync;
 
 import com.trindadeeesx.stocksentry.application.alert.AlertService;
 import com.trindadeeesx.stocksentry.application.settings.SettingService;
+import com.trindadeeesx.stocksentry.application.sse.SseEmitterService;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.product.UnitType;
 import com.trindadeeesx.stocksentry.infraestructure.pdv.PdvProduct;
@@ -37,6 +38,7 @@ public class StockSyncScheduler {
 	private final AlertService alertService;
 	private final SettingService settingService;
 	private final TaskScheduler taskScheduler;
+	private final SseEmitterService sseEmitterService;
 
 	@Lazy
 	@Autowired
@@ -138,6 +140,7 @@ public class StockSyncScheduler {
 
 		log.info("Sync complete — created: {}, updated: {}, critical: {}, recovered: {}",
 			created, updated, critical.size(), recovered.size());
+		sseEmitterService.broadcast("sync");
 	}
 
 	private UnitType parseUnit(String unit) {
