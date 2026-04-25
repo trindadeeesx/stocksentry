@@ -28,6 +28,7 @@ import java.util.List;
 public class SecurityConfig {
 
 	private final JwtAuthFilter jwtAuthFilter;
+	private final SseTokenAuthFilter sseTokenAuthFilter;
 	private final CustomUserDetailsService userDetailsService;
 
 	@Bean
@@ -40,8 +41,11 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 				.requestMatchers("/api/v1/auth/**").permitAll()
-				.requestMatchers("/api/v1/push/vapid-key").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/v1/push/vapid-key").permitAll()
 				.requestMatchers("/actuator/health").permitAll()
+				.requestMatchers(HttpMethod.GET,    "/api/v1/events").authenticated()
+				.requestMatchers(HttpMethod.POST,   "/api/v1/push/subscribe").authenticated()
+				.requestMatchers(HttpMethod.DELETE, "/api/v1/push/subscribe").authenticated()
 				.anyRequest().authenticated()
 			)
 			.headers(headers -> headers
@@ -54,6 +58,7 @@ public class SecurityConfig {
 					.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
 				.frameOptions(frame -> frame.deny())
 			)
+			.addFilterBefore(sseTokenAuthFilter, UsernamePasswordAuthenticationFilter.class)
 			.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 			.build();
 	}
