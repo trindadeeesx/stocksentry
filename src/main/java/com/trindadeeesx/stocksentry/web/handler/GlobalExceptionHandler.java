@@ -1,9 +1,11 @@
 package com.trindadeeesx.stocksentry.web.handler;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -46,7 +48,12 @@ public class GlobalExceptionHandler {
 	
 	@ExceptionHandler(AccessDeniedException.class)
 	@ResponseStatus(HttpStatus.FORBIDDEN)
-	public Map<String, String> handleAccessDenied(AccessDeniedException ex) {
+	public Map<String, String> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+		var auth = SecurityContextHolder.getContext().getAuthentication();
+		log.warn("Access denied — {} {} | principal={} | authorities={}",
+			request.getMethod(), request.getRequestURI(),
+			auth != null ? auth.getName() : "anonymous",
+			auth != null ? auth.getAuthorities() : "[]");
 		return Map.of("error", "Access denied");
 	}
 	
