@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.web.controller;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
 import com.trindadeeesx.stocksentry.domain.push.VapidPublicKeyResponse;
 import com.trindadeeesx.stocksentry.web.dto.push.PushSubscribeRequest;
+import com.trindadeeesx.stocksentry.web.dto.push.PushUnsubscribeRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,7 +29,7 @@ public class PushController {
 	
 	@DeleteMapping("/subscribe")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void unsubscribe(@RequestParam String endpoint) {
-		pushNotificationService.unsubscribe(endpoint);
+	public void unsubscribe(@RequestBody @Valid PushUnsubscribeRequest request) {
+		pushNotificationService.unsubscribe(request.getEndpoint());
 	}
 }
