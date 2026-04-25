@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PdvProduct {
+	private Long id;
 	private String codigo;
 	private String nome;
 	private BigDecimal estoque;
