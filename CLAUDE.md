@@ -18,7 +18,6 @@ produtos automaticamente e dispara alertas (email + push) quando algum produto f
 
 - **Empresa:** Meiliy Cosméticos — loja física + ecommerce + dois pontos de estoque
 - **Problema real:** estoque físico diverge do sistema; produtos quebrados sem baixa; ecommerce vendendo itens sem estoque; perda de vendas
-- **Exemplo real:** sistema diz 60 unidades, fisicamente tem 3
 - **Computadores na loja:** 3 ecommerce, 6 ADM, 5 caixa — todos recebem push
 - **PDV:** software Windows com banco PostgreSQL/MySQL em nuvem (ainda sem acesso real — usando mock)
 - **Modelo de cobrança:** ~R$5-8k implantação + ~R$800-1.200/mês manutenção
@@ -27,15 +26,16 @@ produtos automaticamente e dispara alertas (email + push) quando algum produto f
 
 ## Stack
 
-- **Java 25 + Spring Boot 4**
+- **Java 25 + Spring Boot 4.0.5**
 - **PostgreSQL** — banco próprio do StockSentry (`stocksentry`)
 - **PostgreSQL** — banco mock do PDV (`meiliy_pdv`) com 50 produtos reais de cosméticos
 - **Redis** — cache de produtos e produtos críticos
 - **Flyway** — migrations (atualmente em V5)
-- **JWT** — autenticação stateless (Bearer token)
-- **Resend** — envio de email transacional e relatórios
-- **Web Push VAPID + BouncyCastle** — notificações push nos browsers (service worker)
+- **JWT (jjwt 0.12.6)** — autenticação stateless (Bearer token)
+- **Resend (resend-java 3.1.0)** — envio de email transacional e relatórios
+- **Web Push (nl.martijndwars/web-push) + BouncyCastle** — notificações push nos browsers (service worker)
 - **HikariCP** — pool de conexões (dois datasources)
+- **Lombok** — redução de boilerplate
 
 ---
 
@@ -46,22 +46,26 @@ PDV (meiliy_pdv) ──read-only──► StockSyncScheduler (intervalo configur
                                         │
                               sincroniza produtos
                                         │
-                              verifica críticos
+                              verifica críticos / recuperados
                                         │
                               AlertService.processStockAlert()
                                         │
                         ┌───────────────┴───────────────┐
                     1 EMAIL (Resend)            1 PUSH (Web Push)
                   com todos críticos          com resumo críticos
+                                        │
+                              SseEmitterService.broadcast("sync" | "alert" | "config")
+                              ← frontend escuta via GET /api/v1/events?token={jwt}
 ```
 
 ### Regras de negócio
 
 - **1 email + 1 push por rodada de sync** — nunca um por produto
 - **Cooldown de 30 min por produto** — evita spam repetido
-- **Reset de cooldown:** quando produto volta ao normal, `last_alert` é zerado automaticamente
+- **Reset de cooldown:** quando produto volta ao normal, `last_alert` é zerado via `AlertService.resetAlert()`
 - **Estoque mínimo padrão:** 10 unidades (ajustável por produto via API)
-- **Estoque crítico:** `current_stock <= min_stock`
+- **Estoque crítico:** `currentStock > 0 AND currentStock <= minStock` (produto com algum estoque, mas abaixo do mínimo)
+- **Estoque zerado:** `currentStock <= 0` — tratado separadamente de "crítico"
 - **Intervalo de sync:** configurável via API, padrão 300000ms (5 min), mínimo 30s, máximo 24h
 
 ---
@@ -76,6 +80,7 @@ com.trindadeeesx.stocksentry
 │   ├── product/       ProductService.java
 │   ├── push/          PushNotificationService.java
 │   ├── settings/      SettingService.java
+│   ├── sse/           SseEmitterService.java
 │   └── sync/          StockSyncScheduler.java  ← coração do sistema
 ├── domain
 │   ├── alert/         Alert, AlertConfig, AlertType, AlertStatus
@@ -86,13 +91,16 @@ com.trindadeeesx.stocksentry
 ├── infraestructure    ← (typo intencional, não renomear agora)
 │   ├── cache/         RedisConfig
 │   ├── config/        PrimaryDataSourceConfig, PdvDataSourceConfig, SchedulerConfig, JacksonConfig
-│   ├── pdv/           PdvProduct, PdvProductRepository  ← lê o banco do PDV
+│   ├── mail/          ResendConfig
+│   ├── pdv/           PdvProduct, PdvProductRepository  ← lê o banco do PDV via pdvJdbcTemplate
 │   ├── persistence/   todos os repositories JPA
-│   └── security/      JwtService, JwtAuthFilter, SecurityUtils, CustomUserDetailsService
+│   └── security/      JwtService, JwtAuthFilter, SseTokenAuthFilter, SecurityUtils,
+│                      CustomUserDetailsService, SecurityConfig
 └── web
     ├── controller/    AuthController, ProductController, AlertController,
-    │                  PushController, SyncController, SettingsController, DashboardController
-    ├── dto/           todos os DTOs
+    │                  PushController, SyncController, SettingsController,
+    │                  DashboardController, SseController, DebugController
+    ├── dto/           todos os DTOs (organizados por domínio: alert/, product/, push/, settings/, sync/)
     └── handler/       GlobalExceptionHandler
 ```
 
@@ -139,228 +147,13 @@ vapid.subject                # mailto:voce@email.com
 
 ## Migrations Flyway
 
-| Versão | O que faz                                                          |
-|--------|--------------------------------------------------------------------|
-| V1     | Schema inicial com multi-tenant (legado)                           |
-| V2     | Adiciona `push_subscriptions`                                      |
-| V3     | Adiciona `last_alert` em `products`                                |
+| Versão | O que faz                                                            |
+|--------|----------------------------------------------------------------------|
+| V1     | Schema inicial com multi-tenant (legado)                             |
+| V2     | Adiciona `push_subscriptions`                                        |
+| V3     | Adiciona `last_alert` em `products`                                  |
 | V4     | Remove multi-tenant e `stock_movements` — sistema vira single-tenant |
-| V5     | Cria `app_settings` com `sync_interval_ms` (padrão 300000ms)      |
-
----
-
-## Contrato de API
-
-Todos os endpoints são prefixados com `/api/v1`. Autenticação via `Authorization: Bearer <token>`.
-Respostas de erro seguem o padrão `{ "error": "mensagem" }`.
-
-### Autenticação
-
-| Método | Endpoint              | Auth          | Descrição                                    |
-|--------|-----------------------|---------------|----------------------------------------------|
-| POST   | `/auth/register`      | register-key  | Cria o primeiro usuário admin                |
-| POST   | `/auth/login`         | —             | Retorna JWT                                  |
-
-**POST /auth/register**
-```
-Header: X-Register-Key: <register-key>
-Body:   { "name": "string", "email": "string", "password": "string" }
-201:    { "token": "string", "email": "string", "role": "ADMIN" }
-```
-
-**POST /auth/login**
-```
-Body: { "email": "string", "password": "string" }
-200:  { "token": "string", "email": "string", "role": "ADMIN" }
-401:  { "error": "Invalid email or password" }
-```
-
----
-
-### Produtos
-
-| Método | Endpoint                    | Auth  | Descrição                                |
-|--------|-----------------------------|-------|------------------------------------------|
-| GET    | `/products`                 | token | Lista todos os produtos (paginado)       |
-| GET    | `/products/{id}`            | token | Detalhe de um produto                    |
-| PATCH  | `/products/{id}/min-stock`  | ADMIN | Atualiza estoque mínimo do produto       |
-| GET    | `/products/critical`        | token | Produtos com `current_stock <= min_stock`|
-| GET    | `/products/out-of-stock`    | token | Produtos com `current_stock = 0`         |
-| GET    | `/products/stats`           | token | Totais: ativos, críticos, zerados        |
-
-**ProductResponse**
-```json
-{
-  "id": "uuid",
-  "name": "string",
-  "sku": "string",
-  "unit": "UN | KG | L | CX",
-  "currentStock": 0.000,
-  "minStock": 10.000,
-  "active": true,
-  "critical": false,
-  "createdAt": "2026-04-22T00:00:00"
-}
-```
-
-**ProductStatsResponse**
-```json
-{ "totalActive": 50, "totalCritical": 14, "totalOutOfStock": 3 }
-```
-
-**PATCH /products/{id}/min-stock**
-```json
-{ "minStock": 15 }
-```
-
-Paginação padrão Spring: `?page=0&size=20&sort=name,asc`
-
----
-
-### Alertas
-
-| Método | Endpoint               | Auth  | Descrição                                          |
-|--------|------------------------|-------|----------------------------------------------------|
-| POST   | `/alerts/config`       | ADMIN | Cria configuração de alerta (EMAIL ou PUSH)        |
-| GET    | `/alerts/config`       | ADMIN | Lista configurações ativas                         |
-| DELETE | `/alerts/config/{id}`  | ADMIN | Desativa configuração (soft delete)                |
-| GET    | `/alerts/history`      | token | Histórico paginado de alertas disparados           |
-| GET    | `/alerts/recent`       | token | Últimos N alertas (`?limit=5`, máx 50)             |
-| POST   | `/alerts/report`       | ADMIN | Dispara relatório manual (`?days=7`, máx 365)      |
-
-**AlertConfigRequest**
-```json
-{ "type": "EMAIL | PUSH", "destination": "email@exemplo.com" }
-```
-> Para `PUSH`, `destination` pode ser vazio.
-
-**AlertConfigResponse**
-```json
-{ "id": "uuid", "type": "EMAIL", "destination": "email@exemplo.com", "active": true }
-```
-
-**AlertResponse**
-```json
-{
-  "id": "uuid",
-  "productName": "string",
-  "type": "EMAIL | PUSH",
-  "destination": "string",
-  "status": "SENT | FAILED",
-  "triggeredAt": "2026-04-22T00:00:00"
-}
-```
-
-**Relatórios automáticos por email:**
-- Semanal: toda segunda às 08:00
-- Mensal: todo dia 1 às 08:00
-- Conteúdo: total de alertas, taxa de sucesso, top 10 produtos mais alertados, lista de críticos atuais
-
----
-
-### Notificações Push
-
-| Método | Endpoint            | Auth  | Descrição                       |
-|--------|---------------------|-------|---------------------------------|
-| GET    | `/push/vapid-key`   | token | Retorna a chave pública VAPID   |
-| POST   | `/push/subscribe`   | token | Registra subscription do browser|
-| DELETE | `/push/unsubscribe` | token | Remove subscription             |
-
-**GET /push/vapid-key**
-```json
-{ "publicKey": "string" }
-```
-
-**POST /push/subscribe**
-```json
-{ "endpoint": "string", "p256dh": "string", "auth": "string", "deviceName": "string" }
-```
-
-**DELETE /push/unsubscribe**
-```json
-{ "endpoint": "string" }
-```
-
-Payload enviado ao service worker:
-```json
-{ "title": "⚠️ 3 produto(s) com estoque crítico!", "body": "Produto A: 2 | Produto B: 0 | ..." }
-```
-
----
-
-### Sync
-
-| Método | Endpoint       | Auth  | Descrição                                    |
-|--------|----------------|-------|----------------------------------------------|
-| POST   | `/sync/now`    | ADMIN | Força sync imediato (sem esperar o intervalo)|
-| GET    | `/sync/status` | token | Status da última execução                    |
-
-**SyncStatusResponse**
-```json
-{
-  "lastSyncAt": "2026-04-22T21:00:00",
-  "lastCreated": 0,
-  "lastUpdated": 50,
-  "lastCritical": 14,
-  "lastRecovered": 3
-}
-```
-
----
-
-### Settings
-
-| Método | Endpoint      | Auth  | Descrição                              |
-|--------|---------------|-------|----------------------------------------|
-| GET    | `/settings`   | ADMIN | Retorna configurações atuais do sistema|
-| PATCH  | `/settings`   | ADMIN | Atualiza configurações                 |
-
-**SettingsResponse**
-```json
-{ "syncIntervalMs": 300000 }
-```
-
-**PATCH /settings**
-```json
-{ "syncIntervalMs": 60000 }
-```
-> Mínimo: 30000 (30s) — Máximo: 86400000 (24h)
-
-A alteração tem efeito na **próxima** rodada de sync (não interrompe a que está em andamento).
-
----
-
-### Dashboard
-
-| Método | Endpoint     | Auth  | Descrição                                   |
-|--------|--------------|-------|---------------------------------------------|
-| GET    | `/dashboard` | token | Resumo geral para tela inicial do frontend  |
-
-**DashboardSummaryResponse** *(estrutura — confirmar com DashboardController)*
-```json
-{
-  "totalProducts": 50,
-  "criticalProducts": 14,
-  "outOfStockProducts": 3,
-  "lastSyncAt": "2026-04-22T21:00:00",
-  "recentAlerts": [ /* últimos 5 AlertResponse */ ]
-}
-```
-
----
-
-## Banco mock do PDV (meiliy_pdv)
-
-50 produtos reais de cosméticos em 10 categorias:
-shampoos, condicionadores, máscaras, óleos, finalizadores, colorações, progressivas, perfumaria, skincare, maquiagem.
-
-- 14 produtos críticos (estoque ≤ 10) — disparam alertas
-- 3 produtos zerados
-- 30 dias de histórico de vendas com itens
-
-Scripts: `meiliy_pdv_1_ddl.sql` e `meiliy_pdv_2_dml.sql`
-
-A coluna `codigo` do PDV mapeia para `sku` no StockSentry.
+| V5     | Cria `app_settings` com `sync_interval_ms BIGINT` (padrão 300000)   |
 
 ---
 
@@ -370,22 +163,340 @@ A coluna `codigo` do PDV mapeia para `sku` no StockSentry.
 - **Sem OPERATOR role:** só `ADMIN` existe em `UserRole`
 - **Sem movimentação manual:** o sistema só lê do PDV, nunca escreve
 - **Batch alert:** 1 email + 1 push por rodada — nunca um por produto
-- **Intervalo dinâmico:** sync não usa mais `@Scheduled` fixo; usa `TaskScheduler` com auto-reagendamento lendo o intervalo do banco a cada ciclo
-- **Self-proxy no scheduler:** `StockSyncScheduler` injeta `@Lazy self` para que `@Transactional` e `@CacheEvict` passem pelo proxy Spring ao chamar `sync()` internamente
-- **BouncyCastle registrado no `@PostConstruct`** do `PushNotificationService` — necessário para VAPID funcionar
-- **`@EnableScheduling`** está no `StocksentryApplication`
-- **Import `AccessDeniedException`** deve ser `org.springframework.security.access.AccessDeniedException`
-- **Relatórios semanais e mensais** já implementados via `@Scheduled(cron = ...)` no `AlertService`
+- **Crítico vs zerado são queries separadas:** `findCritical()` usa `currentStock > 0 AND currentStock <= minStock`; `findOutOfStock()` usa `currentStock <= 0`. Produto zerado NÃO entra no fluxo de alertas de crítico.
+- **Intervalo dinâmico:** sync não usa `@Scheduled` fixo; usa `TaskScheduler` com auto-reagendamento. Cada ciclo agenda o próximo lendo o intervalo do banco.
+- **Self-proxy no scheduler:** `StockSyncScheduler` injeta `@Lazy self` para que `@Transactional` e `@CacheEvict` passem pelo proxy Spring ao chamar `sync()` internamente.
+- **BouncyCastle registrado no `@PostConstruct`** do `PushNotificationService` — necessário para VAPID funcionar (usa `Security.addProvider` apenas se o provider ainda não estiver registrado).
+- **`@EnableScheduling`** está no `StocksentryApplication`.
+- **Import `AccessDeniedException`** deve ser `org.springframework.security.access.AccessDeniedException`.
+- **Relatórios semanais e mensais** via `@Scheduled(cron = ...)` no `AlertService` — semanal às 08h nas segundas, mensal às 08h no dia 1.
+- **SSE via query param:** `EventSource` do browser não suporta headers customizados; o JWT para `/api/v1/events` vem como `?token=` e é validado pelo `SseTokenAuthFilter`.
+- **`SseEmitterService` usa `ConcurrentHashMap.newKeySet()`** para thread safety; emitters têm `Long.MAX_VALUE` de timeout.
+- **CORS sem credentials:** `allowedOriginPatterns("*")` com `allowCredentials(false)` — API pura Bearer token, sem cookies.
+- **Security headers ativos:** HSTS, CSP `default-src 'self'`, Referrer-Policy strict-origin-when-cross-origin, X-Frame-Options DENY.
+- **`AppSettings.id`** é `Short` (mapeia `SMALLINT PK`); **`syncIntervalMs`** é `long` (mapeia `BIGINT`) — tabela tem constraint `CHECK (id = 1)` para garantir single-row.
+- **`DELETE /push/subscribe`** recebe o endpoint via `@RequestBody` (campo `endpoint` em `PushUnsubscribeRequest`), não via query param.
+- **`destination` vazio para PUSH:** `AlertService.createConfig` valida email somente para tipo `EMAIL`; para `PUSH` aceita qualquer string (nome do dispositivo) ou vazio.
 
 ---
 
-## O que ainda falta implementar
+## Problemas conhecidos / já resolvidos
 
-- [ ] Frontend (login + dashboard + produtos críticos + histórico de alertas)
-- [ ] Service worker no frontend para receber push nos browsers da loja
-- [ ] Configuração do intervalo de sync via frontend (API já pronta)
-- [ ] Ajuste de estoque mínimo por produto via frontend (API já pronta)
-- [ ] Quando houver acesso ao PDV real: trocar connection string do `pdv.datasource`
+| Problema                                          | Solução                                                                          |
+|---------------------------------------------------|----------------------------------------------------------------------------------|
+| `NoSuchProviderException: BC`                     | `Security.addProvider(new BouncyCastleProvider())` no `@PostConstruct`           |
+| Flyway rodando no banco errado (dois datasources) | Configurar `spring.flyway.url` explicitamente pro stocksentry                    |
+| `javax.sql.DataSource` não encontrado             | Usar `HikariDataSource` diretamente (Spring Boot 4 / Jakarta EE)                 |
+| Checksum mismatch no Flyway                       | `DELETE FROM flyway_schema_history WHERE version IN ('1','3')`                   |
+| Muitos emails simultâneos (limite Resend 5/s)     | Batch: 1 email por rodada com todos os críticos                                  |
+| `@Scheduled` não rodando                          | Faltava `@EnableScheduling` no `StocksentryApplication`                          |
+| `AccessDeniedException` 403 não capturado         | Import errado — usar `org.springframework.security.access`                       |
+| `SMALLINT` vs `Short` no Hibernate                | `AppSettings.id` é `Short`; `syncIntervalMs` é `long` (mapeia `BIGINT`)          |
+| `@Async` + `@Transactional` causando LazyInit     | Removido `@Async` de `processStockAlert` e `sendToAllDevices`                    |
+| `destination` vazio para PUSH                     | `AlertService.createConfig` valida destino apenas para tipo `EMAIL`              |
+| Produtos zerados entrando no alerta de crítico    | `findCritical()` usa `currentStock > 0 AND currentStock <= minStock`             |
+| Push `unsubscribe` sem `@Transactional`           | `deleteByEndpoint` derivada precisa de transação — anotado no `unsubscribe()`    |
+
+---
+
+# Contrato de API — Referência Completa para o Frontend
+
+**Base URL:** `http://localhost:8080/api/v1`
+**Autenticação:** `Authorization: Bearer <token>` em todos os endpoints marcados com `token` ou `ADMIN`.
+**Erros:** todas as respostas de erro seguem `{ "error": "mensagem" }`.
+**Datas:** formato ISO-8601 — `"2026-04-23T21:00:00"`.
+**Paginação:** padrão Spring — query params `?page=0&size=20&sort=name,asc`; resposta é o objeto `Page<T>` do Spring.
+
+---
+
+## Autenticação — `/auth`
+
+### `POST /auth/login`
+Pública.
+
+**Request body:**
+```json
+{
+  "email": "string",      // obrigatório, formato email, max 150
+  "password": "string"    // obrigatório, max 128
+}
+```
+
+**Response `200`:**
+```json
+{ "token": "string", "email": "string", "role": "ADMIN" }
+```
+
+**Response `401`:** `{ "error": "Invalid email or password" }`
+
+---
+
+### `POST /auth/register`
+Cria o primeiro usuário admin. Requer o header `X-Register-Key`.
+
+**Headers:** `X-Register-Key: <chave>`
+
+**Request body:**
+```json
+{
+  "name": "string",       // obrigatório, max 100
+  "email": "string",      // obrigatório, formato email, max 150
+  "password": "string"    // obrigatório, min 8, max 128
+}
+```
+
+**Response `201`:**
+```json
+{ "token": "string", "email": "string", "role": "ADMIN" }
+```
+
+---
+
+### `GET /auth/me`
+Requer token.
+
+**Response `200`:**
+```json
+{ "id": "uuid", "name": "string", "email": "string", "role": "ADMIN" }
+```
+
+---
+
+## Produtos — `/products`
+
+Todos requerem token. `PATCH` requer ADMIN.
+
+### `GET /products`
+Lista produtos ativos, paginado.
+
+**Response `200` — `Page<ProductResponse>`:**
+```json
+{
+  "content": [{
+    "id": "uuid", "name": "string", "sku": "string", "unit": "UN",
+    "currentStock": 5.000, "minStock": 10.000, "active": true,
+    "critical": true, "createdAt": "2026-04-22T00:00:00"
+  }],
+  "totalElements": 50, "totalPages": 3, "number": 0, "size": 20
+}
+```
+
+> `unit`: `UN`, `KG`, `L`, `CX`
+> `critical`: `true` quando `currentStock > 0 AND currentStock <= minStock`
+
+---
+
+### `GET /products/{id}`
+**Response `200`:** `ProductResponse` | **`404`:** `{ "error": "Product not found" }`
+
+---
+
+### `PATCH /products/{id}/min-stock`
+Requer ADMIN.
+
+**Request body:** `{ "minStock": 15.0 }` (obrigatório, >= 0)
+
+**Response `200`:** `ProductResponse` atualizado | **`404`:** `{ "error": "Product not found" }`
+
+---
+
+### `GET /products/critical`
+Produtos com `currentStock > 0 AND currentStock <= minStock`, sem paginação.
+
+**Response `200`:** `ProductResponse[]`
+
+---
+
+### `GET /products/out-of-stock`
+Produtos com `currentStock <= 0`, sem paginação.
+
+**Response `200`:** `ProductResponse[]`
+
+---
+
+### `GET /products/stats`
+
+**Response `200`:**
+```json
+{ "totalActive": 50, "totalCritical": 14, "totalOutOfStock": 3 }
+```
+
+---
+
+## Alertas — `/alerts`
+
+### `POST /alerts/config`
+Requer ADMIN.
+
+**Request body:**
+```json
+{
+  "type": "EMAIL",                    // "EMAIL" ou "PUSH"
+  "destination": "email@exemplo.com"  // obrigatório e válido para EMAIL; livre para PUSH
+}
+```
+
+**Response `201`:** `AlertConfigResponse` | **`400`:** se EMAIL sem endereço válido.
+
+---
+
+### `GET /alerts/config`
+Requer ADMIN. **Response `200`:** `AlertConfigResponse[]`
+
+---
+
+### `DELETE /alerts/config/{id}`
+Requer ADMIN. Soft delete + remove push subscriptions associadas (se tipo PUSH).
+
+**Response `204`** | **`400`:** `{ "error": "Config not found" }`
+
+---
+
+### `GET /alerts/history`
+Histórico paginado. Requer token.
+
+**Response `200` — `Page<AlertResponse>`** com campos: `id`, `productName`, `type`, `destination`, `status` (`SENT`|`FAILED`), `triggeredAt`.
+
+---
+
+### `GET /alerts/recent`
+Requer token. **Query params:** `limit` (padrão `5`, máx `50`). **Response `200`:** `AlertResponse[]`
+
+---
+
+### `POST /alerts/report`
+Requer ADMIN. **Query params:** `days` (padrão `7`, máx `365`).
+
+**Response `200`:** `{ "message": "Report triggered for last 7 days", "timestamp": "..." }`
+
+---
+
+## Notificações Push — `/push`
+
+### `GET /push/vapid-key`
+Pública. **Response `200`:** `{ "publicKey": "string" }`
+
+---
+
+### `POST /push/subscribe`
+Requer token.
+
+**Request body:**
+```json
+{
+  "endpoint": "string",   // obrigatório, max 500
+  "p256dh": "string",     // obrigatório, max 256
+  "auth": "string",       // obrigatório, max 128
+  "deviceName": "string"  // opcional, max 100
+}
+```
+
+**Response `201`:** sem body. Se endpoint já existe, atualiza os campos.
+
+---
+
+### `DELETE /push/subscribe`
+Requer token. Remove subscription.
+
+**Request body:** `{ "endpoint": "string" }` (obrigatório, max 500)
+
+**Response `204`:** sem body
+
+---
+
+## Sync — `/sync`
+
+### `POST /sync/now`
+Requer ADMIN. Força sync imediato.
+
+**Response `200`:** `{ "message": "Sync triggered successfully", "timestamp": "..." }`
+
+---
+
+### `GET /sync/status`
+Requer token.
+
+**Response `200`:**
+```json
+{
+  "lastSyncAt": "2026-04-23T21:00:00",  // null se nunca rodou
+  "lastCreated": 0, "lastUpdated": 50,
+  "lastCritical": 14, "lastRecovered": 3
+}
+```
+
+---
+
+## Settings — `/settings`
+
+Ambos requerem ADMIN.
+
+### `GET /settings`
+**Response `200`:** `{ "syncIntervalMs": 300000 }`
+
+### `PATCH /settings`
+**Request body:** `{ "syncIntervalMs": 60000 }` (min 30000, max 86400000)
+
+**Response `200`:** `{ "syncIntervalMs": 60000 }`
+
+---
+
+## Dashboard — `/dashboard`
+
+### `GET /dashboard/summary`
+Requer token.
+
+**Response `200`:**
+```json
+{
+  "syncStatus": { "lastSyncAt": "...", "lastCreated": 0, "lastUpdated": 50, "lastCritical": 14, "lastRecovered": 3 },
+  "criticalCount": 14, "outOfStockCount": 3,
+  "critical": [ /* ProductResponse[] */ ],
+  "outOfStock": [ /* ProductResponse[] */ ]
+}
+```
+
+---
+
+## SSE — `/events`
+
+### `GET /events?token={jwt}`
+Stream SSE. JWT via query param (EventSource não suporta headers customizados).
+
+| Evento      | Quando                                                  |
+|-------------|---------------------------------------------------------|
+| `sync`      | Final de cada ciclo de sincronização                    |
+| `alert`     | Após persistir alertas (email ou push enviado)          |
+| `config`    | Após criar ou desativar configuração de alerta          |
+| `heartbeat` | A cada 25 segundos (evita que proxies fechem conexão)   |
+
+```js
+const es = new EventSource(`/api/v1/events?token=${jwt}`)
+es.addEventListener('sync',      () => { /* recarregar dashboard */ })
+es.addEventListener('alert',     () => { /* recarregar histórico */ })
+es.addEventListener('config',    () => { /* recarregar configs   */ })
+es.addEventListener('heartbeat', () => { /* ignorar               */ })
+```
+
+---
+
+## Debug — `/debug` (apenas ADMIN)
+
+**Não expor em produção.**
+
+### `GET /debug/pdv/products`
+Lista todos os produtos do PDV (incluindo inativos).
+
+**Response `200`:** `[{ "id": 1, "codigo": "SH001", "nome": "...", "estoque": 3.000, "unidade": "UN" }]`
+
+---
+
+### `PATCH /debug/pdv/products/{id}/stock`
+**Request body:** `{ "estoque": 5.0 }` (>= 0)
+
+**Response `200`:** `{ "id": 1, "estoque": 5.0 }`
+**Response `400`:** `{ "error": "estoque deve ser >= 0" }`
+**Response `404`:** sem body
 
 ---
 
@@ -401,23 +512,27 @@ A coluna `codigo` do PDV mapeia para `sku` no StockSentry.
 # Rodar todos os testes
 ./mvnw test
 
-# Forçar sync manual
-POST http://localhost:8080/api/v1/sync/now
-Authorization: Bearer {token}
-
 # Login
 POST http://localhost:8080/api/v1/auth/login
 {"email": "...", "password": "..."}
+
+# Forçar sync manual
+POST http://localhost:8080/api/v1/sync/now
+Authorization: Bearer {token}
 
 # Limpar alertas e cooldowns para testar
 DELETE FROM alerts;
 UPDATE products SET last_alert = NULL;
 
-# Verificar produtos críticos no banco
+# Verificar produtos críticos no banco (exclui zerados)
 SELECT name, sku, current_stock, min_stock
 FROM products
-WHERE current_stock <= min_stock AND active = true
+WHERE current_stock > 0 AND current_stock <= min_stock AND active = true
 ORDER BY current_stock;
+
+# Verificar produtos zerados
+SELECT name, sku, current_stock FROM products
+WHERE current_stock <= 0 AND active = true;
 
 # Ver histórico de alertas
 SELECT a.triggered_at, p.name, a.type, a.status
@@ -430,17 +545,10 @@ SELECT * FROM app_settings;
 
 ---
 
-## Problemas conhecidos / já resolvidos
+## O que ainda falta implementar
 
-| Problema                                          | Solução                                                                        |
-|---------------------------------------------------|--------------------------------------------------------------------------------|
-| `NoSuchProviderException: BC`                     | Registrar `BouncyCastleProvider` no `@PostConstruct`                           |
-| Flyway rodando no banco errado (dois datasources) | Configurar `spring.flyway.url` explicitamente                                  |
-| `javax.sql.DataSource` não encontrado             | Usar `HikariDataSource` diretamente (Spring Boot 4 / Jakarta EE)               |
-| Checksum mismatch no Flyway                       | `DELETE FROM flyway_schema_history WHERE version IN ('1','3')`                 |
-| Muitos emails simultâneos (limite Resend 5/s)     | Batch: 1 email por rodada com todos os críticos                                |
-| `@Scheduled` não rodando                          | Faltava `@EnableScheduling` no `StocksentryApplication`                        |
-| `AccessDeniedException` 403 não capturado         | Import errado — usar `org.springframework.security.access`                     |
-| `SMALLINT` vs `Integer` no Hibernate              | Entidade `AppSettings` usa `Short` para mapear corretamente `SMALLINT` do banco|
-| `@Async` + `@Transactional` causando LazyInit     | Removido `@Async` de `processStockAlert` e `sendToAllDevices`                  |
-| `System.out.println` de debug em produção         | Removido junto com `ApplicationContext` desnecessário no `PushNotificationService` |
+- [ ] Frontend (login + dashboard + produtos críticos + histórico de alertas)
+- [ ] Service worker no frontend para receber push nos browsers da loja
+- [ ] Configuração do intervalo de sync via frontend (API já pronta)
+- [ ] Ajuste de estoque mínimo por produto via frontend (API já pronta)
+- [ ] Quando houver acesso ao PDV real: trocar connection string do `pdv.datasource`
