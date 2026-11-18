@@ -33,7 +33,7 @@ public class StockService {
     @CacheEvict(value = {"products", "critical-products", "stock-summary"}, allEntries = true)
     @Transactional
     public MovementResponse registerMovement(UUID productId, MovementRequest request) {
-        Product product = productService.getProduct(productId);
+        Product product = productService.getProductForUpdate(productId);
         User user = securityUtils.getCurrentUser();
 
         boolean wasBelowMin = product.isBelowMinStock();

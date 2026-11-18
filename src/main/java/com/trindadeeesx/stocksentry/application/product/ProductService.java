@@ -105,6 +105,15 @@ public class ProductService {
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
     }
 
+    /**
+     * Mesmo contrato de {@link #getProduct(UUID)}, mas com lock de escrita na linha.
+     * Só faz sentido dentro de uma transação já aberta.
+     */
+    public Product getProductForUpdate(UUID id) {
+        return productRepository.findByIdAndTenantIdForUpdate(id, securityUtils.getCurrentTenantId())
+                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+    }
+
     private ProductResponse toResponse(Product product) {
         return ProductResponse.builder()
                 .id(product.getId())

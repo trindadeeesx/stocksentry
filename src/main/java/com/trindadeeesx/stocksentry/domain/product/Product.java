@@ -47,6 +47,14 @@ public class Product {
 
     private LocalDateTime lastAlert = null;
 
+    /**
+     * Rede de segurança contra lost update: se duas transações editarem o mesmo
+     * produto sem o lock pessimista (ex.: edição de cadastro x movimentação),
+     * a segunda falha com conflito em vez de sobrescrever a primeira.
+     */
+    @Version
+    private Long version;
+
     @Column(nullable = false)
     private boolean active = true;
 

@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.web.handler;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -39,6 +40,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Map<String, String> handleAccessDenied(AccessDeniedException ex) {
         return Map.of("error", "Access denied");
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return Map.of("error", "O registro foi alterado por outra operação. Recarregue e tente de novo.");
     }
 
     @ExceptionHandler(Exception.class)
