@@ -60,7 +60,9 @@ public class AlertService {
     }
 
     public void deleteConfig(UUID id) {
+        UUID tenantId = securityUtils.getCurrentTenantId();
         AlertConfig config = alertConfigRepository.findById(id)
+                .filter(c -> c.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Config not found"));
         config.setActive(false);
         alertConfigRepository.save(config);

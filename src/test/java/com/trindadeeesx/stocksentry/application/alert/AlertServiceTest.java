@@ -30,6 +30,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -155,6 +156,36 @@ class AlertServiceTest {
 
 		verify(alertConfigRepository, never()).findAllByTenantIdAndActiveTrue(any());
 		verify(alertRepository, never()).save(any());
+	}
+
+	/**
+	 * A config de alerta pertence a um tenant. Um usuário de outra empresa que
+	 * conheça o ID não pode desativá-la: responde como inexistente e não grava nada.
+	 */
+	@Test
+	void shouldNotDeleteConfig_whenItBelongsToAnotherTenant() {
+		AlertConfig alheia = config(AlertType.EMAIL, "dono@loja.com");
+		when(securityUtils.getCurrentTenantId()).thenReturn(UUID.randomUUID());
+		when(alertConfigRepository.findById(alheia.getId())).thenReturn(Optional.of(alheia));
+
+		assertThatThrownBy(() -> alertService.deleteConfig(alheia.getId()))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Config not found");
+
+		assertThat(alheia.isActive()).isTrue();
+		verify(alertConfigRepository, never()).save(any());
+	}
+
+	@Test
+	void shouldDeactivateConfig_whenItBelongsToCurrentTenant() {
+		AlertConfig propria = config(AlertType.EMAIL, "dono@loja.com");
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenant.getId());
+		when(alertConfigRepository.findById(propria.getId())).thenReturn(Optional.of(propria));
+
+		alertService.deleteConfig(propria.getId());
+
+		assertThat(propria.isActive()).isFalse();
+		verify(alertConfigRepository).save(propria);
 	}
 
 	AlertConfig config(AlertType type, String destination) {
