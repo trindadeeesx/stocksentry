@@ -86,16 +86,25 @@ public class ProductService {
         productRepository.delete(product);
     }
 
-    @Cacheable(value = "critical-products", key = "'critical'")
+    @Cacheable(value = "critical-products", key = "#root.target.tenantCacheKey('critical')")
     public List<ProductResponse> findCritical() {
         return productRepository.findCriticalByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
     }
 
-    @Cacheable(value = "critical-products", key = "'out-of-stock'")
+    @Cacheable(value = "critical-products", key = "#root.target.tenantCacheKey('out-of-stock')")
     public List<ProductResponse> findOutOfStock() {
         return productRepository.findOutOfStockByTenantId(securityUtils.getCurrentTenantId())
                 .stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * Chave de cache por tenant. Sem o tenant na chave, a primeira empresa a
+     * consultar populava o cache e as outras recebiam a lista dela.
+     * Público porque é chamado pelo SpEL de @Cacheable (#root.target).
+     */
+    public String tenantCacheKey(String suffix) {
+        return securityUtils.getCurrentTenantId() + ":" + suffix;
     }
 
     public Product getProduct(UUID id) {
