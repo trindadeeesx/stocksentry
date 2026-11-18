@@ -1,18 +1,13 @@
 package com.trindadeeesx.stocksentry.domain.stock;
 
-import com.trindadeeesx.stocksentry.domain.product.Product;
-import org.springframework.context.ApplicationEvent;
+import java.util.UUID;
 
-public class StockBelowMinEvent extends ApplicationEvent {
-
-    private final Product product;
-
-    public StockBelowMinEvent(Object source, Product product) {
-        super(source);
-        this.product = product;
-    }
-
-    public Product getProduct() {
-        return product;
-    }
+/**
+ * Publicado quando uma movimentação deixa o produto abaixo do estoque mínimo.
+ *
+ * Carrega só o ID: o alerta roda em outra thread, depois do commit, e precisa
+ * recarregar o produto do banco. Passar a entidade JPA entre threads leva a
+ * LazyInitializationException e a gravar estado velho por cima do atual.
+ */
+public record StockBelowMinEvent(UUID productId) {
 }

@@ -56,7 +56,7 @@ public class StockService {
         );
 
         if (product.isBelowMinStock()) {
-            eventPublisher.publishEvent(new StockBelowMinEvent(this, product));
+            eventPublisher.publishEvent(new StockBelowMinEvent(product.getId()));
         } else if (wasBelowMin) {
             alertService.resetAlert(product);
         }

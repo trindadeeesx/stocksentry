@@ -5,6 +5,7 @@ import com.trindadeeesx.stocksentry.application.product.ProductService;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.product.UnitType;
 import com.trindadeeesx.stocksentry.domain.stock.MovementType;
+import com.trindadeeesx.stocksentry.domain.stock.StockBelowMinEvent;
 import com.trindadeeesx.stocksentry.domain.stock.StockMovement;
 import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import com.trindadeeesx.stocksentry.domain.user.User;
@@ -102,6 +103,35 @@ class StockServiceTest {
 
 		assertThat(product.getCurrentStock()).isEqualByComparingTo("10");
 		verify(stockMovementRepository, never()).save(any());
+	}
+
+	/**
+	 * O evento leva só o ID. A entidade não pode atravessar para a thread do
+	 * alerta (ver StockBelowMinEvent).
+	 */
+	@Test
+	void shouldPublishEventWithProductId_whenStockDropsBelowMin() {
+		when(productService.getProductForUpdate(product.getId())).thenReturn(product);
+		when(securityUtils.getCurrentUser()).thenReturn(user);
+		when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(inv -> inv.getArgument(0));
+
+		stockService.registerMovement(product.getId(), request(MovementType.EXIT, "6"));
+
+		verify(eventPublisher).publishEvent(new StockBelowMinEvent(product.getId()));
+		verify(alertService, never()).resetAlert(any());
+	}
+
+	@Test
+	void shouldResetAlert_whenStockRecoversAboveMin() {
+		product.setCurrentStock(new BigDecimal("2"));
+		when(productService.getProductForUpdate(product.getId())).thenReturn(product);
+		when(securityUtils.getCurrentUser()).thenReturn(user);
+		when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(inv -> inv.getArgument(0));
+
+		stockService.registerMovement(product.getId(), request(MovementType.ENTRY, "10"));
+
+		verify(alertService).resetAlert(product);
+		verify(eventPublisher, never()).publishEvent(any(Object.class));
 	}
 
 	static MovementRequest request(MovementType type, String quantity) {
