@@ -53,6 +53,7 @@ Corpo sempre `{"error": <mensagem>}`.
 - Remover sync/PDV: `/sync/status`, `/sync/now`, `/settings`, painel Debug PDV e cards Criados/Atualizados/Recuperados.
 - SSE: pedir o ticket (`POST /events/ticket`) antes de cada conexão.
 - Consumir o histórico paginado e o novo `/auth/register` e `/users`.
+- Limpeza da marca antiga: textos e cor já trocados na branch `fix/remover-meiliy` do front (aguardando merge do usuário); falta reescrever o `CLAUDE.md` do front (genérico, multiusuário, sem a marca antiga).
 
 **Back:**
 
