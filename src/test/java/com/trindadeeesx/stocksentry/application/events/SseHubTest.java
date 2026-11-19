@@ -54,6 +54,24 @@ class SseHubTest {
 		assertThat(quebrado.attempts).isEqualTo(1);
 	}
 
+	/**
+	 * Quando o único emitter do tenant sai, a lista do tenant some do mapa. Uma
+	 * aba que conecta depois tem que entrar numa lista viva e receber eventos.
+	 */
+	@Test
+	void shouldDeliverToNewSubscriber_afterTenantLostItsOnlyEmitter() {
+		BrokenEmitter quebrado = new BrokenEmitter();
+		hub.register(tenantA, quebrado);
+		hub.publish(tenantA, "alert");
+
+		RecordingEmitter novo = new RecordingEmitter();
+		hub.register(tenantA, novo);
+		hub.publish(tenantA, "config");
+
+		assertThat(novo.sent).isEqualTo(1);
+		assertThat(quebrado.attempts).isEqualTo(1);
+	}
+
 	@Test
 	void shouldSendHeartbeatToEveryTenant() {
 		RecordingEmitter deA = new RecordingEmitter();

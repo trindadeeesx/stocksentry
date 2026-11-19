@@ -33,7 +33,14 @@ public class SseHub {
     }
 
     void register(UUID tenantId, SseEmitter emitter) {
-        emitters.computeIfAbsent(tenantId, id -> new CopyOnWriteArrayList<>()).add(emitter);
+        // O add fica dentro do compute: feito fora, um remove concorrente podia
+        // esvaziar e tirar a lista do mapa entre o get e o add, e o emitter novo
+        // ficaria numa lista órfã, sem receber nada.
+        emitters.compute(tenantId, (id, list) -> {
+            CopyOnWriteArrayList<SseEmitter> target = list != null ? list : new CopyOnWriteArrayList<>();
+            target.add(emitter);
+            return target;
+        });
         emitter.onCompletion(() -> remove(tenantId, emitter));
         emitter.onTimeout(() -> remove(tenantId, emitter));
         emitter.onError(e -> remove(tenantId, emitter));
