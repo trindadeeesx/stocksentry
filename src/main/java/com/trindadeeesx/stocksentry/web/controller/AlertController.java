@@ -1,9 +1,11 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
+import com.trindadeeesx.stocksentry.application.alert.AlertReportService;
 import com.trindadeeesx.stocksentry.application.alert.AlertService;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
+import com.trindadeeesx.stocksentry.web.dto.alert.ReportResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,6 +22,7 @@ import java.util.UUID;
 public class AlertController {
 
     private final AlertService alertService;
+    private final AlertReportService alertReportService;
 
     @PostMapping("/config")
     @ResponseStatus(HttpStatus.CREATED)
@@ -41,5 +44,10 @@ public class AlertController {
     @GetMapping("/history")
     public Page<AlertResponse> history(Pageable pageable) {
         return alertService.findAlertHistory(pageable);
+    }
+
+    @PostMapping("/report")
+    public ReportResponse report(@RequestParam int days) {
+        return alertReportService.sendReport(days);
     }
 }
