@@ -15,14 +15,17 @@ import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlertService {
@@ -57,7 +60,9 @@ public class AlertService {
     }
 
     public void deleteConfig(UUID id) {
+        UUID tenantId = securityUtils.getCurrentTenantId();
         AlertConfig config = alertConfigRepository.findById(id)
+                .filter(c -> c.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Config not found"));
         config.setActive(false);
         alertConfigRepository.save(config);
@@ -69,16 +74,40 @@ public class AlertService {
                 .stream().map(this::toAlertResponse).toList();
     }
 
-    @Async
-    public void processStockAlert(Product product) {
-        if (!shouldDispatch(product)) {
+    /**
+     * Chamado depois do commit da movimentação (ver {@link StockAlertListener}),
+     * em outra thread e outra transação. Recarrega o produto em vez de confiar
+     * numa entidade vinda de outra thread e nunca salva o Product inteiro: a
+     * única escrita no produto é a reserva atômica de lastAlert.
+     *
+     * Regra de disparo:
+     * - produto voltou ao normal antes do alerta rodar: não dispara
+     * - primeira vez abaixo do mínimo (lastAlert == null): dispara
+     * - já alertado há menos de 30 min: não dispara
+     * - cooldown expirado: dispara
+     */
+    @Transactional
+    public void processStockAlert(UUID productId) {
+        Optional<Product> found = productRepository.findWithTenantById(productId);
+        if (found.isEmpty()) {
+            log.warn("Alerta ignorado: produto {} não existe mais", productId);
+            return;
+        }
+
+        Product product = found.get();
+        if (!product.isBelowMinStock()) {
             return;
         }
 
         List<AlertConfig> configs = alertConfigRepository
                 .findAllByTenantIdAndActiveTrue(product.getTenant().getId());
-
         if (configs.isEmpty()) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int claimed = productRepository.claimAlertSlot(productId, now, now.minusMinutes(COOLDOWN_MINUTES));
+        if (claimed == 0) {
             return;
         }
 
@@ -95,7 +124,8 @@ public class AlertService {
                 }
                 status = AlertStatus.SENT;
             } catch (Exception e) {
-                System.out.println("Erro ao disparar alerta: " + e.getMessage());
+                log.error("Falha ao disparar alerta {} do produto {} para {}",
+                        config.getType(), productId, config.getDestination(), e);
             }
 
             alertRepository.save(
@@ -104,30 +134,11 @@ public class AlertService {
                             .product(product)
                             .type(config.getType())
                             .destination(config.getDestination())
-                            .triggeredAt(LocalDateTime.now())
+                            .triggeredAt(now)
                             .status(status)
                             .build()
             );
         }
-
-        product.setLastAlert(LocalDateTime.now());
-        productRepository.save(product);
-    }
-
-    /**
-     * regra de disparo
-     * - primeira vez abaixo do minimo (lastAlert == null) -> dispara
-     * - ja abaixo, sem cooldown, não dispara
-     * - ja abaixo, cooldown expirado (30 min) -> dispara
-     */
-    private boolean shouldDispatch(Product product) {
-        if (product.getLastAlert() == null) {
-            return true;
-        }
-
-        return product.getLastAlert()
-                .plusMinutes(COOLDOWN_MINUTES)
-                .isBefore(LocalDateTime.now());
     }
 
     public void resetAlert(Product product) {
