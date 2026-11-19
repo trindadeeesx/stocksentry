@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.application.alert;
 
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import com.trindadeeesx.stocksentry.application.events.SseHub;
 import com.resend.Resend;
 import com.resend.services.emails.Emails;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
@@ -11,10 +12,12 @@ import com.trindadeeesx.stocksentry.domain.alert.AlertType;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.product.UnitType;
 import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
+import com.trindadeeesx.stocksentry.domain.user.User;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
+import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigRequest;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +59,7 @@ class AlertServiceTest {
 	@Mock(answer = Answers.RETURNS_DEEP_STUBS) Resend resend;
 	@Mock PushNotificationService pushNotificationService;
 	@Mock ProductRepository productRepository;
+	@Mock SseHub sseHub;
 
 	@InjectMocks AlertService alertService;
 
@@ -218,6 +222,56 @@ class AlertServiceTest {
 		assertThat(result.getContent().get(0).getProductName()).isEqualTo("Shampoo 300ml");
 		assertThat(result.getTotalElements()).isEqualTo(1);
 		verify(alertRepository).findAllByTenantIdOrderByTriggeredAtDesc(tenant.getId(), pageable);
+	}
+
+	/**
+	 * Depois de gravar o alerta, as abas abertas do tenant são avisadas para
+	 * recarregar o histórico sem esperar o polling.
+	 */
+	@Test
+	void shouldPublishAlertEvent_afterDispatch() {
+		when(productRepository.findWithTenantById(product.getId())).thenReturn(Optional.of(product));
+		when(alertConfigRepository.findAllByTenantIdAndActiveTrue(tenant.getId()))
+				.thenReturn(List.of(config(AlertType.PUSH, "")));
+		when(productRepository.claimAlertSlot(eq(product.getId()), any(), any())).thenReturn(1);
+
+		alertService.processStockAlert(product.getId());
+
+		verify(sseHub).publish(tenant.getId(), "alert");
+	}
+
+	@Test
+	void shouldNotPublish_whenSlotNotClaimed() {
+		when(productRepository.findWithTenantById(product.getId())).thenReturn(Optional.of(product));
+		when(alertConfigRepository.findAllByTenantIdAndActiveTrue(tenant.getId()))
+				.thenReturn(List.of(config(AlertType.EMAIL, "dono@loja.com")));
+		when(productRepository.claimAlertSlot(eq(product.getId()), any(), any())).thenReturn(0);
+
+		alertService.processStockAlert(product.getId());
+
+		verify(sseHub, never()).publish(any(), anyString());
+	}
+
+	@Test
+	void shouldPublishConfigEvent_onCreateAndDelete() {
+		User user = User.builder().id(UUID.randomUUID()).tenant(tenant).build();
+		when(securityUtils.getCurrentUser()).thenReturn(user);
+		when(alertConfigRepository.save(any(AlertConfig.class))).thenAnswer(inv -> inv.getArgument(0));
+		AlertConfigRequest request = new AlertConfigRequest();
+		request.setType(AlertType.EMAIL);
+		request.setDestination("dono@loja.com");
+
+		alertService.createConfig(request);
+
+		verify(sseHub, times(1)).publish(tenant.getId(), "config");
+
+		AlertConfig propria = config(AlertType.EMAIL, "dono@loja.com");
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenant.getId());
+		when(alertConfigRepository.findById(propria.getId())).thenReturn(Optional.of(propria));
+
+		alertService.deleteConfig(propria.getId());
+
+		verify(sseHub, times(2)).publish(tenant.getId(), "config");
 	}
 
 	AlertConfig config(AlertType type, String destination) {

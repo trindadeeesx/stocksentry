@@ -5,6 +5,7 @@ import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -98,6 +100,16 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return Map.of("error", "O registro foi alterado por outra operação. Recarregue e tente de novo.");
+    }
+
+    /**
+     * Mantém o status escolhido por quem lançou (ex.: 401 do ticket SSE). Sem
+     * corpo: a rota SSE só produz text/event-stream e não há conversor de Map
+     * para esse tipo.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Void> handleResponseStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).build();
     }
 
     @ExceptionHandler(Exception.class)
