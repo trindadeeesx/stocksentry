@@ -52,13 +52,16 @@ Corpo sempre `{"error": <mensagem>}`.
 
 - Remover sync/PDV: `/sync/status`, `/sync/now`, `/settings`, painel Debug PDV e cards Criados/Atualizados/Recuperados.
 - SSE: pedir o ticket (`POST /events/ticket`) antes de cada conexão.
+- SSE: o ticket é de uso único, então o auto-reconnect do `EventSource` reusa um ticket gasto, toma 401 e para. No `onerror`, fechar o `EventSource`, pedir ticket novo e abrir outro (vale também depois do timeout de 30 min do servidor).
 - Consumir o histórico paginado e o novo `/auth/register` e `/users`.
 - Limpeza da marca antiga: textos e cor já trocados na branch `fix/remover-meiliy` do front (aguardando merge do usuário); falta reescrever o `CLAUDE.md` do front (genérico, multiusuário, sem a marca antiga).
 
 **Back:**
 
-- Corrida em register/createOperator vira 500 (`DataIntegrityViolationException` não mapeada para 409).
-- E-mail é case-sensitive.
+- Antes de deploy público: rate limit em `POST /auth/register` (por IP) e cooldown por tenant em `POST /alerts/report`.
+- "Crítico" inconsistente: a query de críticos usa `<=` e `isBelowMinStock` usa `<`.
+- Handler de `ResponseStatusException` responde sem corpo `{"error"}`.
+- Sem limite de tickets/streams SSE por usuário.
 - Falha do Resend no meio do relatório vira 422 com envio parcial.
 - SSE não fecha os emitters no shutdown.
 - Teste de integração com Testcontainers provando o lock com duas saídas simultâneas.
