@@ -4,7 +4,7 @@ Controle de estoque multi-tenant com alerta de estoque crítico por e-mail (Rese
 
 ## Stack
 
-- **Backend (`stocksentry/`):** Java 21, Spring Boot 4.0.5, Postgres, Redis (cache), Flyway (V1–V4), JWT. Pacotes `domain/`, `application/`, `infraestructure/`, `web/`.
+- **Backend (`stocksentry/`):** Java 21, Spring Boot 4.0.5, Postgres, Redis (cache), Flyway (V1–V5), JWT. Pacotes `domain/`, `application/`, `infraestructure/`, `web/`.
 - **Frontend (`stocksentry-web/`):** Angular 21 standalone + signals, deploy pensado para o Railway.
 
 ## Rodar local
@@ -14,59 +14,53 @@ Controle de estoque multi-tenant com alerta de estoque crítico por e-mail (Rese
 
 ## Já feito
 
-Mergeado:
-
-- Lock pessimista na movimentação de estoque + `@Version` em `Product` (migration V4).
+- Lock pessimista na movimentação de estoque + `@Version` em `Product` (V4).
 - Alerta via `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`, evento só com `productId` e cooldown atômico (`claimAlertSlot`).
-- Isolamento por tenant no delete de config de alerta e na chave do cache de produtos críticos.
-- Testes unitários com Mockito dos services.
-
-Em branches empilhadas aguardando merge do usuário (nesta ordem):
-
-1. `fix/cache-redis-listas`: cache `critical-products` usa serializer com tipo fixo `List<ProductResponse>` (`Stream.toList()` saía sem tipo e quebrava a leitura com 500).
-2. `fix/global-exception-handler`: `NotFoundException`, `ConflictException` e `BusinessRuleException` em `application/common`; contrato de erros abaixo.
-3. `feature/historico-alertas-paginado`: `GET /api/v1/alerts/history` devolve `Page`.
-4. `feature/min-stock`: `PATCH /api/v1/products/{id}/min-stock` (entrar/sair de crítico dispara evento/reset do alerta).
-5. `fix/register-e-usuarios`: `POST /api/v1/auth/register` público cria empresa + ADMIN; `POST/GET /api/v1/users` só ADMIN (cria OPERATOR).
-6. `feature/relatorio-alertas`: `POST /api/v1/alerts/report?days=7|30` envia e-mail HTML para os destinos EMAIL do tenant (422 se não houver).
-7. `feature/sse-eventos`: `POST /api/v1/events/ticket` (autenticado, ticket de uso único, 30s) + `GET /api/v1/events?ticket=` (SSE; eventos `alert`, `config` e `heartbeat` a cada 25s; registro em memória, uma instância).
+- Isolamento por tenant no delete de config de alerta e na chave do cache de críticos; cache `critical-products` com serializer de tipo fixo.
+- Exceções próprias em `application/common` e contrato de erros (abaixo).
+- `GET /api/v1/alerts/history` paginado.
+- `PATCH /api/v1/products/{id}/min-stock` (entrar/sair de crítico dispara evento/reset do alerta).
+- `POST /api/v1/auth/register` público cria empresa + ADMIN (5 por IP/hora); `POST/GET /api/v1/users` só ADMIN (cria OPERATOR). E-mail sem diferenciar maiúsculas, com índice único em `lower(email)` (V5).
+- `POST /api/v1/alerts/report?days=7|30`: e-mail HTML para os destinos EMAIL do tenant (422 sem destino, 502 se o provedor falhar para algum, 1 por minuto por empresa).
+- SSE: `POST /api/v1/events/ticket` (ticket de uso único, 30s, até 5 pendentes por usuário) + `GET /api/v1/events?ticket=` (eventos `alert`, `config` e `heartbeat` a cada 25s; até 50 streams por empresa; em memória, uma instância).
+- "Crítico" é sempre `currentStock < minStock` (listagem, relatório e alerta).
+- Limites de uso (`RateLimiter`) em memória; IP real atrás de proxy via `server.forward-headers-strategy: native`.
 
 ## Contrato de erros
 
-Corpo sempre `{"error": <mensagem>}`.
+Corpo `{"error": <mensagem>}`, exceto nas rotas `text/event-stream` (só status).
 
 | Exceção | Status | `error` |
 |---|---|---|
 | `NotFoundException`, `NoResourceFoundException` | 404 | message / `"Not found"` |
-| `ConflictException` | 409 | message |
+| `ConflictException`; `DataIntegrityViolationException` de unicidade (SQLState 23505) | 409 | message / `"Conflict"` |
+| `DataIntegrityViolationException` classe 22 (valor não cabe na coluna) | 400 | `"Valor inválido"` |
+| outras `DataIntegrityViolationException` (NOT NULL, FK) | 500 | `"Internal server error"` + `log.error` |
 | `BusinessRuleException` | 422 | message |
+| `TooManyRequestsException` | 429 | message |
+| `UpstreamException` (provedor externo) | 502 | message |
 | `HttpMessageNotReadableException` | 400 | `"Corpo da requisição inválido"` |
-| `MethodArgumentTypeMismatchException`, `MissingServletRequestParameterException` | 400 | `"Parâmetro inválido: <nome>"` |
+| `MethodArgumentTypeMismatchException`, `MissingServletRequestParameterException`, `PropertyReferenceException` (sort) | 400 | `"Parâmetro inválido: <nome>"` |
 | `org.springframework.security.access.AccessDeniedException` | 403 | `"Access denied"` |
-| `ResponseStatusException` | o próprio status (ex.: 401 para ticket SSE inválido) | motivo |
-| `Exception` | 500 | `"Internal server error"` (com `log.error`) |
+| `ResponseStatusException` | o próprio status (ex.: 401 ticket SSE inválido) | — |
+| `AsyncRequestTimeoutException`, `AsyncRequestNotUsableException` | silencioso (fim de stream SSE) | — |
+| `Exception` | 500 | `"Internal server error"` + `log.error` |
 
 ## Pendências conhecidas
 
 **Front:**
 
 - Remover sync/PDV: `/sync/status`, `/sync/now`, `/settings`, painel Debug PDV e cards Criados/Atualizados/Recuperados.
-- SSE: pedir o ticket (`POST /events/ticket`) antes de cada conexão.
-- SSE: o ticket é de uso único, então o auto-reconnect do `EventSource` reusa um ticket gasto, toma 401 e para. No `onerror`, fechar o `EventSource`, pedir ticket novo e abrir outro (vale também depois do timeout de 30 min do servidor).
-- Consumir o histórico paginado e o novo `/auth/register` e `/users`.
-- Limpeza da marca antiga: textos e cor já trocados na branch `fix/remover-meiliy` do front (aguardando merge do usuário); falta reescrever o `CLAUDE.md` do front (genérico, multiusuário, sem a marca antiga).
+- SSE: pedir o ticket (`POST /events/ticket`) antes de cada conexão. O ticket é de uso único, então o auto-reconnect do `EventSource` reusa um ticket gasto, toma 401 e para: no `onerror`, fechar, pedir ticket novo e abrir outro (vale também depois do timeout de 30 min do servidor).
+- Consumir o histórico paginado e o novo `/auth/register` e `/users`; tratar 429 e 502.
+- Reescrever o `CLAUDE.md` do front (genérico, multiusuário, sem a marca antiga).
 
 **Back:**
 
-- Antes de deploy público: rate limit em `POST /auth/register` (por IP) e cooldown por tenant em `POST /alerts/report`.
-- "Crítico" inconsistente: a query de críticos usa `<=` e `isBelowMinStock` usa `<`.
-- Handler de `ResponseStatusException` responde sem corpo `{"error"}`.
-- Sem limite de tickets/streams SSE por usuário.
-- Falha do Resend no meio do relatório vira 422 com envio parcial.
-- SSE não fecha os emitters no shutdown.
+- SSE não fecha os emitters no shutdown (o graceful shutdown espera até 30s).
 - Teste de integração com Testcontainers provando o lock com duas saídas simultâneas.
 - CI no GitHub Actions.
-- README de verdade (prints, `docker compose up`, usuário demo).
+- README de verdade (prints, `./dev.sh`, usuário demo).
 
 ## Regras de trabalho
 
