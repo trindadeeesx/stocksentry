@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import com.trindadeeesx.stocksentry.application.events.SseHub;
 import com.trindadeeesx.stocksentry.application.events.SseTicketService;
 import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
@@ -84,5 +85,18 @@ class EventsControllerTest {
 				.andExpect(request().asyncStarted());
 
 		verify(sseHub).subscribe(tenantId);
+	}
+
+	/** Limite de streams do tenant: só o status, a rota é text/event-stream. */
+	@Test
+	void shouldReturn429_whenTenantHasTooManyStreams() throws Exception {
+		UUID tenantId = UUID.randomUUID();
+		when(ticketService.consume("bom"))
+				.thenReturn(Optional.of(new SseTicketService.TicketOwner(UUID.randomUUID(), tenantId)));
+		when(sseHub.subscribe(tenantId)).thenThrow(new TooManyRequestsException("Muitas conexões"));
+
+		mockMvc.perform(get("/api/v1/events").param("ticket", "bom")
+						.accept(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(status().isTooManyRequests());
 	}
 }

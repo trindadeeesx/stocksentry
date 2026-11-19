@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.events;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -8,6 +9,8 @@ import java.io.IOException;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SseHubTest {
 
@@ -104,7 +107,23 @@ class SseHubTest {
 
 	@Test
 	void shouldIgnorePublish_whenTenantHasNoSubscribers() {
-		hub.publish(UUID.randomUUID(), "alert");
+		UUID tenant = UUID.randomUUID();
+
+		assertThatCode(() -> hub.publish(tenant, "alert")).doesNotThrowAnyException();
+		assertThat(hub.subscriberCount(tenant)).isZero();
+	}
+
+	/** Limite de streams abertos por tenant: abas esquecidas não acumulam sem fim. */
+	@Test
+	void shouldRefuseSubscribe_whenTenantHasTooManyStreams() {
+		UUID tenant = UUID.randomUUID();
+		for (int i = 0; i < SseHub.MAX_STREAMS_PER_TENANT; i++) {
+			hub.register(tenant, new RecordingEmitter());
+		}
+
+		assertThatThrownBy(() -> hub.subscribe(tenant)).isInstanceOf(TooManyRequestsException.class);
+		assertThat(hub.subscriberCount(tenant)).isEqualTo(SseHub.MAX_STREAMS_PER_TENANT);
+		assertThat(hub.subscribe(UUID.randomUUID())).isNotNull();
 	}
 
 	static class RecordingEmitter extends SseEmitter {

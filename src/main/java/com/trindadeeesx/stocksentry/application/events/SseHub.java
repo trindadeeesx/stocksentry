@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.events;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -23,10 +24,15 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class SseHub {
 
     static final long TIMEOUT_MS = Duration.ofMinutes(30).toMillis();
+    /** Streams abertos por tenant; abas esquecidas não acumulam sem fim. */
+    static final int MAX_STREAMS_PER_TENANT = 50;
 
     private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(UUID tenantId) {
+        if (subscriberCount(tenantId) >= MAX_STREAMS_PER_TENANT) {
+            throw new TooManyRequestsException("Muitas conexões abertas para esta empresa");
+        }
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
         register(tenantId, emitter);
         return emitter;
@@ -49,6 +55,11 @@ public class SseHub {
             emitter.complete();
         });
         emitter.onError(e -> remove(tenantId, emitter));
+    }
+
+    int subscriberCount(UUID tenantId) {
+        List<SseEmitter> list = emitters.get(tenantId);
+        return list == null ? 0 : list.size();
     }
 
     public void publish(UUID tenantId, String event) {

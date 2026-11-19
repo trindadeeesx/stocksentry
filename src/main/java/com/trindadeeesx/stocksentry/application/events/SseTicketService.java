@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.events;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -25,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SseTicketService {
 
     static final Duration TTL = Duration.ofSeconds(30);
+    /** Tickets ainda não usados por usuário; o front precisa de um por conexão. */
+    static final int MAX_PENDING_PER_USER = 5;
 
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Entry> tickets = new ConcurrentHashMap<>();
@@ -38,6 +41,10 @@ public class SseTicketService {
         Instant now = clock.instant();
         // Limpa os que expiraram sem ser usados, para o mapa não crescer sem fim.
         tickets.values().removeIf(e -> e.isExpired(now));
+        long pending = tickets.values().stream().filter(e -> e.owner().userId().equals(userId)).count();
+        if (pending >= MAX_PENDING_PER_USER) {
+            throw new TooManyRequestsException("Muitos tickets pendentes; use os que já foram emitidos");
+        }
 
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
