@@ -7,6 +7,7 @@ import com.trindadeeesx.stocksentry.web.dto.stock.MovementRequest;
 import jakarta.validation.Valid;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -93,6 +95,16 @@ class GlobalExceptionHandlerTest {
 				.andExpect(jsonPath("$.error").value("Regra violada"));
 	}
 
+	/**
+	 * ResponseStatusException já diz o status que quer (ex.: 401 do ticket SSE
+	 * inválido). O handler genérico de Exception não pode engolir isso como 500.
+	 */
+	@Test
+	void shouldKeepStatus_whenResponseStatusExceptionIsThrown() throws Exception {
+		mockMvc.perform(get("/unauthorized"))
+				.andExpect(status().isUnauthorized());
+	}
+
 	@Test
 	void shouldReturn500WithoutLeakingDetails_whenUnexpectedErrorOccurs() throws Exception {
 		mockMvc.perform(get("/boom"))
@@ -121,6 +133,11 @@ class GlobalExceptionHandlerTest {
 		@GetMapping("/denied")
 		void throwDenied() {
 			throw new AccessDeniedException("negado");
+		}
+
+		@GetMapping("/unauthorized")
+		void throwUnauthorized() {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 		}
 
 		@GetMapping("/boom")

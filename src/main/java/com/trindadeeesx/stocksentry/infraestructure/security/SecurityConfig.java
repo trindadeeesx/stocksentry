@@ -1,8 +1,10 @@
 package com.trindadeeesx.stocksentry.infraestructure.security;
 
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -33,6 +35,11 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // O stream SSE é um dispatch async; o fim dele e páginas de erro
+                        // não podem cair de novo na exigência de autenticação.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                        // EventSource não manda header: o ticket na query é a autenticação.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/push/vapid-key").permitAll()
                         .requestMatchers("/actuator/health").permitAll()

@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.application.alert;
 
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import com.trindadeeesx.stocksentry.application.events.SseHub;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
@@ -22,6 +23,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,6 +42,7 @@ public class AlertService {
     private final SecurityUtils securityUtils;
     private final Resend resend;
     private final PushNotificationService pushNotificationService;
+    private final SseHub sseHub;
 
     @Value("${resend.from}")
     private String from;
@@ -53,6 +57,7 @@ public class AlertService {
                         .active(true)
                         .build()
         );
+        publishAfterCommit(config.getTenant().getId(), "config");
         return toConfigResponse(config);
     }
 
@@ -69,6 +74,7 @@ public class AlertService {
                 .orElseThrow(() -> new NotFoundException("Config not found"));
         config.setActive(false);
         alertConfigRepository.save(config);
+        publishAfterCommit(tenantId, "config");
     }
 
     public Page<AlertResponse> findAlertHistory(Pageable pageable) {
@@ -141,6 +147,26 @@ public class AlertService {
                             .status(status)
                             .build()
             );
+        }
+
+        publishAfterCommit(product.getTenant().getId(), "alert");
+    }
+
+    /**
+     * O front reage ao evento buscando os dados pela API. Se o aviso saísse
+     * antes do commit, ele leria o estado antigo; por isso, dentro de transação,
+     * o envio espera o commit.
+     */
+    private void publishAfterCommit(UUID tenantId, String event) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sseHub.publish(tenantId, event);
+                }
+            });
+        } else {
+            sseHub.publish(tenantId, event);
         }
     }
 
