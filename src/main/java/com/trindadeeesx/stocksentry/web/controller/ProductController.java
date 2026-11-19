@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
 import com.trindadeeesx.stocksentry.application.product.ProductService;
+import com.trindadeeesx.stocksentry.web.dto.product.MinStockRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import jakarta.validation.Valid;
@@ -40,6 +41,12 @@ public class ProductController {
     public ProductResponse update(@PathVariable UUID id,
                                   @RequestBody @Valid ProductRequest request) {
         return productService.update(id, request);
+    }
+
+    @PatchMapping("/{id}/min-stock")
+    public ProductResponse updateMinStock(@PathVariable UUID id,
+                                          @RequestBody @Valid MinStockRequest request) {
+        return productService.updateMinStock(id, request.getMinStock());
     }
 
     @DeleteMapping("/{id}")
