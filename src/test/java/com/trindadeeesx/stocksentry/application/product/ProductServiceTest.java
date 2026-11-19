@@ -1,12 +1,15 @@
 package com.trindadeeesx.stocksentry.application.product;
 
 import com.trindadeeesx.stocksentry.application.alert.AlertService;
+import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.product.UnitType;
 import com.trindadeeesx.stocksentry.domain.stock.StockBelowMinEvent;
+import com.trindadeeesx.stocksentry.domain.tenant.Tenant;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
+import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,5 +110,41 @@ class ProductServiceTest {
 
 		verify(productRepository, never()).save(any());
 		verify(eventPublisher, never()).publishEvent(any(Object.class));
+	}
+
+	/** SKU repetido no tenant é conflito com o que já existe: 409, não 400. */
+	@Test
+	void shouldThrowConflict_whenCreatingWithDuplicatedSku() {
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenantId);
+		when(productRepository.existsByTenantIdAndSku(tenantId, "SKU-1")).thenReturn(true);
+
+		assertThatThrownBy(() -> productService.create(request("SKU-1")))
+				.isInstanceOf(ConflictException.class)
+				.hasMessage("SKU already exists for this tenant");
+
+		verify(productRepository, never()).save(any());
+	}
+
+	@Test
+	void shouldThrowConflict_whenUpdatingToDuplicatedSku() {
+		product.setTenant(Tenant.builder().id(tenantId).build());
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenantId);
+		when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+		when(productRepository.existsByTenantIdAndSku(tenantId, "SKU-2")).thenReturn(true);
+
+		assertThatThrownBy(() -> productService.update(product.getId(), request("SKU-2")))
+				.isInstanceOf(ConflictException.class)
+				.hasMessage("SKU already exists for this tenant");
+
+		verify(productRepository, never()).save(any());
+	}
+
+	private ProductRequest request(String sku) {
+		ProductRequest request = new ProductRequest();
+		request.setName("Shampoo");
+		request.setSku(sku);
+		request.setUnit(UnitType.UN);
+		request.setMinStock(new BigDecimal("3"));
+		return request;
 	}
 }
