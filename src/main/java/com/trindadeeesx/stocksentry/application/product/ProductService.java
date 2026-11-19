@@ -1,7 +1,9 @@
 package com.trindadeeesx.stocksentry.application.product;
 
+import com.trindadeeesx.stocksentry.application.alert.AlertService;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.domain.product.Product;
+import com.trindadeeesx.stocksentry.domain.stock.StockBelowMinEvent;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
 import com.trindadeeesx.stocksentry.web.dto.product.ProductRequest;
@@ -9,9 +11,11 @@ import com.trindadeeesx.stocksentry.web.dto.product.ProductResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -22,6 +26,8 @@ import java.util.UUID;
 public class ProductService {
     private final ProductRepository productRepository;
     private final SecurityUtils securityUtils;
+    private final ApplicationEventPublisher eventPublisher;
+    private final AlertService alertService;
 
     @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
     public ProductResponse create(ProductRequest request) {
@@ -72,6 +78,28 @@ public class ProductService {
         product.setMinStock(request.getMinStock());
 
         return toResponse(productRepository.save(product));
+    }
+
+    /**
+     * Altera só o estoque mínimo. Mudar o mínimo pode colocar o produto dentro ou
+     * fora do estado crítico, então o estado do alerta acompanha, como na movimentação.
+     */
+    @Transactional
+    @CacheEvict(value = {"products", "critical-products"}, allEntries = true)
+    public ProductResponse updateMinStock(UUID id, BigDecimal minStock) {
+        Product product = getProductForUpdate(id);
+        boolean wasBelowMin = product.isBelowMinStock();
+
+        product.setMinStock(minStock);
+        Product saved = productRepository.save(product);
+
+        if (saved.isBelowMinStock() && !wasBelowMin) {
+            eventPublisher.publishEvent(new StockBelowMinEvent(saved.getId()));
+        } else if (!saved.isBelowMinStock() && wasBelowMin) {
+            alertService.resetAlert(saved);
+        }
+
+        return toResponse(saved);
     }
 
     @CacheEvict(value = {"products", "critical-products"}, allEntries = true)

@@ -2,7 +2,9 @@ package com.trindadeeesx.stocksentry.application.product;
 
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
+import com.trindadeeesx.stocksentry.application.alert.AlertService;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.cache.annotation.Cacheable;
@@ -21,7 +23,8 @@ class ProductServiceCacheKeyTest {
 	@Test
 	void shouldBuildDifferentKeys_forDifferentTenants() {
 		SecurityUtils securityUtils = mock(SecurityUtils.class);
-		ProductService service = new ProductService(mock(ProductRepository.class), securityUtils);
+		ProductService service = new ProductService(mock(ProductRepository.class), securityUtils,
+				mock(ApplicationEventPublisher.class), mock(AlertService.class));
 		UUID tenantA = UUID.randomUUID();
 		UUID tenantB = UUID.randomUUID();
 
