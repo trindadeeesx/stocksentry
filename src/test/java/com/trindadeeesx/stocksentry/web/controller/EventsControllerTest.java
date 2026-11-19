@@ -99,4 +99,18 @@ class EventsControllerTest {
 						.accept(MediaType.TEXT_EVENT_STREAM))
 				.andExpect(status().isTooManyRequests());
 	}
+
+	/**
+	 * Cliente antigo ainda manda ?token= em vez de ?ticket=. Sem ticket é falta
+	 * de credencial: 401 direto, sem passar pelo handler de parâmetro ausente
+	 * (que tentaria escrever JSON numa rota text/event-stream).
+	 */
+	@Test
+	void shouldReturn401_whenTicketParamIsMissing() throws Exception {
+		mockMvc.perform(get("/api/v1/events").param("token", "jwt-antigo")
+						.accept(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(status().isUnauthorized());
+
+		verify(sseHub, never()).subscribe(any());
+	}
 }
