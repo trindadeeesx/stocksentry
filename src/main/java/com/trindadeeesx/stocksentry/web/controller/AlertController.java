@@ -6,6 +6,8 @@ import com.trindadeeesx.stocksentry.web.dto.alert.AlertConfigResponse;
 import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,7 +39,7 @@ public class AlertController {
     }
 
     @GetMapping("/history")
-    public List<AlertResponse> history() {
-        return alertService.findAlertHistory();
+    public Page<AlertResponse> history(Pageable pageable) {
+        return alertService.findAlertHistory(pageable);
     }
 }

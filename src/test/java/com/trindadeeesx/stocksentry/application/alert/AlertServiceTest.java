@@ -15,6 +15,7 @@ import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertConfigRepos
 import com.trindadeeesx.stocksentry.infraestructure.persistence.AlertRepository;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
+import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -189,6 +194,30 @@ class AlertServiceTest {
 
 		assertThat(propria.isActive()).isFalse();
 		verify(alertConfigRepository).save(propria);
+	}
+
+	@Test
+	void shouldReturnHistoryPage_forCurrentTenant() {
+		Pageable pageable = PageRequest.of(0, 10);
+		Alert alert = Alert.builder()
+				.id(UUID.randomUUID())
+				.tenant(tenant)
+				.product(product)
+				.type(AlertType.EMAIL)
+				.destination("dono@loja.com")
+				.status(AlertStatus.SENT)
+				.triggeredAt(LocalDateTime.now())
+				.build();
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenant.getId());
+		when(alertRepository.findAllByTenantIdOrderByTriggeredAtDesc(tenant.getId(), pageable))
+				.thenReturn(new PageImpl<>(List.of(alert), pageable, 1));
+
+		Page<AlertResponse> result = alertService.findAlertHistory(pageable);
+
+		assertThat(result.getContent()).hasSize(1);
+		assertThat(result.getContent().get(0).getProductName()).isEqualTo("Shampoo 300ml");
+		assertThat(result.getTotalElements()).isEqualTo(1);
+		verify(alertRepository).findAllByTenantIdOrderByTriggeredAtDesc(tenant.getId(), pageable);
 	}
 
 	AlertConfig config(AlertType type, String destination) {
