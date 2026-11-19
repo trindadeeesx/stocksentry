@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
+import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.application.auth.AuthService;
 import com.trindadeeesx.stocksentry.domain.user.User;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.UserRepository;
@@ -41,7 +42,7 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me() {
         User u = userRepository.findById(securityUtils.getCurrentUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         return ResponseEntity.ok(Map.of(
                 "user", Map.of(

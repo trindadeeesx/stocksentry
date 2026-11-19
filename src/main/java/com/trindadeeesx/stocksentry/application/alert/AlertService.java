@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.alert;
 
+import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
@@ -63,7 +64,7 @@ public class AlertService {
         UUID tenantId = securityUtils.getCurrentTenantId();
         AlertConfig config = alertConfigRepository.findById(id)
                 .filter(c -> c.getTenant().getId().equals(tenantId))
-                .orElseThrow(() -> new IllegalArgumentException("Config not found"));
+                .orElseThrow(() -> new NotFoundException("Config not found"));
         config.setActive(false);
         alertConfigRepository.save(config);
     }

@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.product;
 
+import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.ProductRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
@@ -111,7 +112,7 @@ public class ProductService {
         UUID tenantId = securityUtils.getCurrentTenantId();
         return productRepository.findById(id)
                 .filter(p -> p.getTenant().getId().equals(tenantId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+                .orElseThrow(() -> new NotFoundException("Product not found"));
     }
 
     /**
@@ -120,7 +121,7 @@ public class ProductService {
      */
     public Product getProductForUpdate(UUID id) {
         return productRepository.findByIdAndTenantIdForUpdate(id, securityUtils.getCurrentTenantId())
-                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+                .orElseThrow(() -> new NotFoundException("Product not found"));
     }
 
     private ProductResponse toResponse(Product product) {

@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.application.alert;
 
+import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.resend.Resend;
 import com.resend.services.emails.Emails;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
@@ -171,7 +172,7 @@ class AlertServiceTest {
 		when(alertConfigRepository.findById(alheia.getId())).thenReturn(Optional.of(alheia));
 
 		assertThatThrownBy(() -> alertService.deleteConfig(alheia.getId()))
-				.isInstanceOf(IllegalArgumentException.class)
+				.isInstanceOf(NotFoundException.class)
 				.hasMessage("Config not found");
 
 		assertThat(alheia.isActive()).isTrue();

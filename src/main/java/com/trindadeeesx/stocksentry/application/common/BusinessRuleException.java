@@ -1,0 +1,7 @@
+package com.trindadeeesx.stocksentry.application.common;
+
+public class BusinessRuleException extends RuntimeException {
+    public BusinessRuleException(String message) {
+        super(message);
+    }
+}
