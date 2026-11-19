@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.web.handler;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
 import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleConflict(ConflictException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public Map<String, String> handleTooManyRequests(TooManyRequestsException ex) {
         return Map.of("error", ex.getMessage());
     }
 

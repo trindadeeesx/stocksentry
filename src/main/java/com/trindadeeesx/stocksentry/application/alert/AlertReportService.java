@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.application.alert;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
+import com.trindadeeesx.stocksentry.application.common.RateLimiter;
 import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +39,7 @@ public class AlertReportService {
 	private final StockMovementRepository stockMovementRepository;
 	private final SecurityUtils securityUtils;
 	private final Resend resend;
+	private final RateLimiter rateLimiter;
 
 	@Value("${resend.from}")
 	private String from;
@@ -47,6 +50,8 @@ public class AlertReportService {
 		}
 
 		UUID tenantId = securityUtils.getCurrentTenantId();
+		rateLimiter.check("report:" + tenantId, 1, Duration.ofMinutes(1),
+				"Aguarde um minuto antes de gerar outro relatório");
 		List<String> recipients = alertConfigRepository.findAllByTenantIdAndActiveTrue(tenantId).stream()
 				.filter(c -> c.getType() == AlertType.EMAIL)
 				.map(AlertConfig::getDestination)

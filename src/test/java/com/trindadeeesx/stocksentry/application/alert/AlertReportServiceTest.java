@@ -4,6 +4,8 @@ import com.resend.Resend;
 import com.resend.services.emails.Emails;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
+import com.trindadeeesx.stocksentry.application.common.RateLimiter;
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
@@ -28,13 +30,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -49,6 +55,7 @@ class AlertReportServiceTest {
 	@Mock StockMovementRepository stockMovementRepository;
 	@Mock SecurityUtils securityUtils;
 	@Mock(answer = Answers.RETURNS_DEEP_STUBS) Resend resend;
+	@Mock RateLimiter rateLimiter;
 
 	@InjectMocks AlertReportService service;
 
@@ -156,5 +163,17 @@ class AlertReportServiceTest {
 		assertThat(captor.getValue().getHtml())
 				.contains("Alertas no período: <strong>3</strong> (enviados: 2, falhos: 1)")
 				.contains("Movimentações de estoque: <strong>12</strong>");
+	}
+
+	/** Um relatório por minuto por empresa: o botão não vira disparador de spam. */
+	@Test
+	void shouldRefuseReport_whenTenantIsInCooldown() throws Exception {
+		when(securityUtils.getCurrentTenantId()).thenReturn(tenantId);
+		doThrow(new TooManyRequestsException("Aguarde um minuto antes de gerar outro relatório"))
+				.when(rateLimiter).check(eq("report:" + tenantId), eq(1), eq(Duration.ofMinutes(1)), anyString());
+		Emails emails = resend.emails();
+
+		assertThatThrownBy(() -> service.sendReport(7)).isInstanceOf(TooManyRequestsException.class);
+		verify(emails, never()).send(any(CreateEmailOptions.class));
 	}
 }
