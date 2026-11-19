@@ -18,6 +18,8 @@ import com.trindadeeesx.stocksentry.web.dto.alert.AlertResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,10 +71,10 @@ public class AlertService {
         alertConfigRepository.save(config);
     }
 
-    public List<AlertResponse> findAlertHistory() {
+    public Page<AlertResponse> findAlertHistory(Pageable pageable) {
         return alertRepository
-                .findAllByTenantIdOrderByTriggeredAtDesc(securityUtils.getCurrentTenantId())
-                .stream().map(this::toAlertResponse).toList();
+                .findAllByTenantIdOrderByTriggeredAtDesc(securityUtils.getCurrentTenantId(), pageable)
+                .map(this::toAlertResponse);
     }
 
     /**
