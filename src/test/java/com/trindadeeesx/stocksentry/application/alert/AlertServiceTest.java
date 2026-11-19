@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.application.alert;
 
 import com.resend.Resend;
+import com.resend.services.emails.Emails;
 import com.trindadeeesx.stocksentry.application.push.PushNotificationService;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
@@ -137,7 +138,8 @@ class AlertServiceTest {
 		when(alertConfigRepository.findAllByTenantIdAndActiveTrue(tenant.getId()))
 				.thenReturn(List.of(config(AlertType.EMAIL, "dono@loja.com"), config(AlertType.PUSH, "")));
 		when(productRepository.claimAlertSlot(eq(product.getId()), any(), any())).thenReturn(1);
-		doThrow(new RuntimeException("provedor de e-mail fora do ar")).when(resend.emails()).send(any());
+		Emails emails = resend.emails();
+		doThrow(new RuntimeException("provedor de e-mail fora do ar")).when(emails).send(any());
 
 		alertService.processStockAlert(product.getId());
 
