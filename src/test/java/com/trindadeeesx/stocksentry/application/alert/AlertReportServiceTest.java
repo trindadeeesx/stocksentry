@@ -4,7 +4,10 @@ import com.resend.Resend;
 import com.resend.services.emails.Emails;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
+import com.trindadeeesx.stocksentry.application.common.UpstreamException;
+import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
+import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
 import com.trindadeeesx.stocksentry.domain.alert.AlertType;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.product.UnitType;
@@ -31,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -114,5 +118,43 @@ class AlertReportServiceTest {
 
 		assertThat(response.getMessage()).isEqualTo("Relatório dos últimos 30 dias enviado para 2 destinatário(s).");
 		assertThat(response.getTimestamp()).isNotNull();
+	}
+
+	/**
+	 * Um destinatário com problema não pode impedir os outros de receberem.
+	 * Falha de envio é do provedor (502), não da requisição (422), e a mensagem
+	 * diz quantos receberam.
+	 */
+	@Test
+	void shouldTryAllRecipients_andFail502_whenOneSendFails() throws Exception {
+		stubTenantData(List.of(config(AlertType.EMAIL, "a@x.com"), config(AlertType.EMAIL, "b@x.com")));
+		Emails emails = resend.emails();
+		when(emails.send(argThat(o -> o != null && o.getTo().contains("a@x.com"))))
+				.thenThrow(new RuntimeException("provedor fora do ar"));
+
+		assertThatThrownBy(() -> service.sendReport(7))
+				.isInstanceOf(UpstreamException.class)
+				.hasMessage("Relatório enviado para 1 de 2 destinatário(s); falha em: a@x.com");
+
+		verify(emails, times(2)).send(any(CreateEmailOptions.class));
+	}
+
+	/** O resumo do período conta enviados e falhos separadamente. */
+	@Test
+	void shouldSummarizeSentAndFailedAlerts() throws Exception {
+		stubTenantData(List.of(config(AlertType.EMAIL, "a@x.com")));
+		when(alertRepository.findAllByTenantIdAndTriggeredAtAfter(any(), any())).thenReturn(List.of(
+				Alert.builder().status(AlertStatus.SENT).build(),
+				Alert.builder().status(AlertStatus.SENT).build(),
+				Alert.builder().status(AlertStatus.FAILED).build()));
+		Emails emails = resend.emails();
+
+		service.sendReport(7);
+
+		ArgumentCaptor<CreateEmailOptions> captor = ArgumentCaptor.forClass(CreateEmailOptions.class);
+		verify(emails).send(captor.capture());
+		assertThat(captor.getValue().getHtml())
+				.contains("Alertas no período: <strong>3</strong> (enviados: 2, falhos: 1)")
+				.contains("Movimentações de estoque: <strong>12</strong>");
 	}
 }

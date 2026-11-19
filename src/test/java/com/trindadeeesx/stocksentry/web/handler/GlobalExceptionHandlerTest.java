@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.web.handler;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
 import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import com.trindadeeesx.stocksentry.web.dto.stock.MovementRequest;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -119,6 +120,13 @@ class GlobalExceptionHandlerTest {
 				.andExpect(jsonPath("$.error").value("Conflict"));
 	}
 
+	@Test
+	void shouldReturn502_whenUpstreamFails() throws Exception {
+		mockMvc.perform(get("/upstream"))
+				.andExpect(status().isBadGateway())
+				.andExpect(jsonPath("$.error").value("Provedor fora do ar"));
+	}
+
 	/** Texto maior que a coluna (classe 22) é dado inválido do cliente: 400. */
 	@Test
 	void shouldReturn400_whenValueDoesNotFitColumn() throws Exception {
@@ -233,6 +241,11 @@ class GlobalExceptionHandlerTest {
 		@GetMapping("/conflict")
 		void throwConflict() {
 			throw new ConflictException("Conflito");
+		}
+
+		@GetMapping("/upstream")
+		void throwUpstream() {
+			throw new UpstreamException("Provedor fora do ar");
 		}
 
 		@GetMapping("/integrity")

@@ -3,6 +3,7 @@ package com.trindadeeesx.stocksentry.application.alert;
 import com.resend.Resend;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
+import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import com.trindadeeesx.stocksentry.domain.alert.Alert;
 import com.trindadeeesx.stocksentry.domain.alert.AlertConfig;
 import com.trindadeeesx.stocksentry.domain.alert.AlertStatus;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,6 +65,7 @@ public class AlertReportService {
 		String subject = "Relatório de estoque — últimos " + days + " dias";
 		String html = buildHtml(days, alerts.size(), sent, failed, critical, movements);
 
+		List<String> failures = new ArrayList<>();
 		for (String recipient : recipients) {
 			try {
 				resend.emails().send(CreateEmailOptions.builder()
@@ -73,8 +76,12 @@ public class AlertReportService {
 						.build());
 			} catch (Exception e) {
 				log.error("Falha ao enviar relatório para {}", recipient, e);
-				throw new BusinessRuleException("Falha ao enviar o relatório por e-mail");
+				failures.add(recipient);
 			}
+		}
+		if (!failures.isEmpty()) {
+			throw new UpstreamException("Relatório enviado para %d de %d destinatário(s); falha em: %s"
+					.formatted(recipients.size() - failures.size(), recipients.size(), String.join(", ", failures)));
 		}
 
 		return ReportResponse.builder()
