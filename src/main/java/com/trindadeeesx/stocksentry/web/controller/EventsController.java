@@ -37,7 +37,7 @@ public class EventsController {
 
     /** Público no SecurityConfig: o ticket é a autenticação. */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@RequestParam String ticket) {
+    public SseEmitter stream(@RequestParam(required = false) String ticket) {
         TicketOwner owner = ticketService.consume(ticket)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         try {
