@@ -85,6 +85,23 @@ class SseHubTest {
 		assertThat(deB.sent).isEqualTo(1);
 	}
 
+	/**
+	 * No timeout de 30 min o hub tem que tirar o emitter da lista e completá-lo.
+	 * Sem o complete(), o Spring despacha AsyncRequestTimeoutException e o
+	 * handler genérico loga ERROR com stack a cada conexão que expira.
+	 */
+	@Test
+	void shouldRemoveAndCompleteEmitter_onTimeout() {
+		CallbackEmitter expirado = new CallbackEmitter();
+		hub.register(tenantA, expirado);
+
+		expirado.timeoutCallback.run();
+		hub.publish(tenantA, "alert");
+
+		assertThat(expirado.completed).isTrue();
+		assertThat(expirado.sent).isZero();
+	}
+
 	@Test
 	void shouldIgnorePublish_whenTenantHasNoSubscribers() {
 		hub.publish(UUID.randomUUID(), "alert");
@@ -96,6 +113,21 @@ class SseHubTest {
 		@Override
 		public void send(SseEventBuilder builder) {
 			sent++;
+		}
+	}
+
+	static class CallbackEmitter extends RecordingEmitter {
+		Runnable timeoutCallback;
+		boolean completed;
+
+		@Override
+		public synchronized void onTimeout(Runnable callback) {
+			timeoutCallback = callback;
+		}
+
+		@Override
+		public synchronized void complete() {
+			completed = true;
 		}
 	}
 

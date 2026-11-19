@@ -1,6 +1,7 @@
 package com.trindadeeesx.stocksentry.application.product;
 
 import com.trindadeeesx.stocksentry.application.alert.AlertService;
+import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.domain.product.Product;
 import com.trindadeeesx.stocksentry.domain.stock.StockBelowMinEvent;
@@ -34,7 +35,7 @@ public class ProductService {
         UUID tenantId = securityUtils.getCurrentTenantId();
 
         if (productRepository.existsByTenantIdAndSku(tenantId, request.getSku())) {
-            throw new IllegalArgumentException("SKU already exists for this tenant");
+            throw new ConflictException("SKU already exists for this tenant");
         }
 
         Product product = productRepository.save(
@@ -69,7 +70,7 @@ public class ProductService {
         UUID tenantId = securityUtils.getCurrentTenantId();
         if (!request.getSku().equals(product.getSku()) &&
                 productRepository.existsByTenantIdAndSku(tenantId, request.getSku())) {
-            throw new IllegalArgumentException("SKU already exists for this tenant");
+            throw new ConflictException("SKU already exists for this tenant");
         }
 
         product.setName(request.getName());

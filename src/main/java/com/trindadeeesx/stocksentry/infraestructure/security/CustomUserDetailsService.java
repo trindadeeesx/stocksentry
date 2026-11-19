@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.infraestructure.security;
 
+import com.trindadeeesx.stocksentry.domain.user.User;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -15,7 +16,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepo.findByEmail(email)
+        return userRepo.findByEmailIgnoreCase(User.normalizeEmail(email))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
     }
 }

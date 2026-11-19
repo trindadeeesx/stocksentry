@@ -42,7 +42,12 @@ public class SseHub {
             return target;
         });
         emitter.onCompletion(() -> remove(tenantId, emitter));
-        emitter.onTimeout(() -> remove(tenantId, emitter));
+        // Completar no timeout encerra a requisição assíncrona normalmente; sem
+        // isso o Spring despacha AsyncRequestTimeoutException para o handler.
+        emitter.onTimeout(() -> {
+            remove(tenantId, emitter);
+            emitter.complete();
+        });
         emitter.onError(e -> remove(tenantId, emitter));
     }
 

@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -19,6 +20,15 @@ import java.util.UUID;
 @NoArgsConstructor @AllArgsConstructor
 @Builder
 public class User implements UserDetails {
+
+    /**
+     * E-mail não diferencia maiúscula na prática; gravar e buscar sempre na
+     * mesma forma evita duas contas para a mesma pessoa e login que falha por caixa.
+     */
+    public static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;

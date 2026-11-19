@@ -3,7 +3,10 @@ package com.trindadeeesx.stocksentry.web.handler;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
 import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -15,6 +18,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
@@ -103,6 +108,25 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Corrida entre dois cadastros iguais: os dois passam pelo exists e o segundo
+     * bate na constraint única. Mensagem genérica para não vazar nome de
+     * constraint nem SQL.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.debug("Violação de integridade", ex);
+        return Map.of("error", "Conflict");
+    }
+
+    /** Campo desconhecido em ?sort= dos endpoints paginados. */
+    @ExceptionHandler(PropertyReferenceException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> handlePropertyReference(PropertyReferenceException ex) {
+        return Map.of("error", "Parâmetro inválido: sort");
+    }
+
+    /**
      * Mantém o status escolhido por quem lançou (ex.: 401 do ticket SSE). Sem
      * corpo: a rota SSE só produz text/event-stream e não há conversor de Map
      * para esse tipo.
@@ -110,6 +134,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Void> handleResponseStatus(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode()).build();
+    }
+
+    /**
+     * Timeout e cliente que fechou a aba são rotina numa conexão SSE. A resposta
+     * já é text/event-stream (às vezes já commitada), então não há corpo a
+     * escrever: só o status, se ainda der, e log em debug.
+     */
+    @ExceptionHandler({AsyncRequestTimeoutException.class, AsyncRequestNotUsableException.class})
+    public void handleAsyncRequestEnded(Exception ex, HttpServletResponse response) {
+        log.debug("Requisição assíncrona encerrada: {}", ex.toString());
+        if (ex instanceof AsyncRequestTimeoutException && !response.isCommitted()) {
+            response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
+        }
     }
 
     @ExceptionHandler(Exception.class)

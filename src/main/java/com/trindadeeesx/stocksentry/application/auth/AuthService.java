@@ -41,7 +41,8 @@ public class AuthService {
         if (tenantRepository.existsBySlug(request.getTenantSlug())) {
             throw new ConflictException("Slug already in use");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = User.normalizeEmail(request.getEmail());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Email already in use");
         }
 
@@ -57,7 +58,7 @@ public class AuthService {
                 User.builder()
                         .tenant(tenant)
                         .name(request.getName())
-                        .email(request.getEmail())
+                        .email(email)
                         .passwordHash(passwordEncoder.encode(request.getPassword()))
                         .role(UserRole.ADMIN)
                         .active(true)
@@ -73,11 +74,12 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        String email = User.normalizeEmail(request.getEmail());
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(email, request.getPassword())
         );
 
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
 
         return AuthResponse.builder()
                 .token(jwtService.generateToken(user))
