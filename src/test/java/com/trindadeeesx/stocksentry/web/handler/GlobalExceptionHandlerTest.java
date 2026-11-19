@@ -114,9 +114,30 @@ class GlobalExceptionHandlerTest {
 	 */
 	@Test
 	void shouldReturn409_whenDataIntegrityIsViolated() throws Exception {
-		mockMvc.perform(get("/integrity"))
+		mockMvc.perform(get("/integrity").param("sqlState", "23505"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.error").value("Conflict"));
+	}
+
+	/** Texto maior que a coluna (classe 22) é dado inválido do cliente: 400. */
+	@Test
+	void shouldReturn400_whenValueDoesNotFitColumn() throws Exception {
+		mockMvc.perform(get("/integrity").param("sqlState", "22001"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error").value("Valor inválido"));
+	}
+
+	/**
+	 * NOT NULL, FK e afins são bug do servidor: 500 com log de ERROR, para não
+	 * sumirem atrás de um 409.
+	 */
+	@Test
+	void shouldReturn500AndLogError_whenIntegrityViolationIsNotUnique() throws Exception {
+		ListAppender<ILoggingEvent> logs = attachLogs();
+		mockMvc.perform(get("/integrity").param("sqlState", "23502"))
+				.andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.error").value("Internal server error"));
+		assertThat(logs.list).anyMatch(e -> e.getLevel() == Level.ERROR);
 	}
 
 	/** ?sort=foo em endpoint paginado é erro do cliente, não do servidor. */
@@ -215,8 +236,9 @@ class GlobalExceptionHandlerTest {
 		}
 
 		@GetMapping("/integrity")
-		void throwIntegrity() {
-			throw new DataIntegrityViolationException("duplicate key value violates unique constraint");
+		void throwIntegrity(@RequestParam String sqlState) {
+			throw new DataIntegrityViolationException("integrity",
+					new java.sql.SQLException("violação", sqlState));
 		}
 
 		@GetMapping("/bad-sort")
