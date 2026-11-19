@@ -5,6 +5,8 @@ import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -103,6 +105,25 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return Map.of("error", "O registro foi alterado por outra operação. Recarregue e tente de novo.");
+    }
+
+    /**
+     * Corrida entre dois cadastros iguais: os dois passam pelo exists e o segundo
+     * bate na constraint única. Mensagem genérica para não vazar nome de
+     * constraint nem SQL.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.debug("Violação de integridade", ex);
+        return Map.of("error", "Conflict");
+    }
+
+    /** Campo desconhecido em ?sort= dos endpoints paginados. */
+    @ExceptionHandler(PropertyReferenceException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> handlePropertyReference(PropertyReferenceException ex) {
+        return Map.of("error", "Parâmetro inválido: sort");
     }
 
     /**

@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyPath;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -106,6 +108,25 @@ class GlobalExceptionHandlerTest {
 				.andExpect(jsonPath("$.error").value("Conflito"));
 	}
 
+	/**
+	 * Dois cadastros simultâneos com o mesmo e-mail/slug passam pelo exists e o
+	 * segundo esbarra na constraint única do banco. Isso é conflito, não 500.
+	 */
+	@Test
+	void shouldReturn409_whenDataIntegrityIsViolated() throws Exception {
+		mockMvc.perform(get("/integrity"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error").value("Conflict"));
+	}
+
+	/** ?sort=foo em endpoint paginado é erro do cliente, não do servidor. */
+	@Test
+	void shouldReturn400_whenSortPropertyIsUnknown() throws Exception {
+		mockMvc.perform(get("/bad-sort"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error").value("Parâmetro inválido: sort"));
+	}
+
 	@Test
 	void shouldReturn422_whenBusinessRuleExceptionIsThrown() throws Exception {
 		mockMvc.perform(get("/rule"))
@@ -166,6 +187,10 @@ class GlobalExceptionHandlerTest {
 		return (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
 	}
 
+	static class Sample {
+		String name;
+	}
+
 	@RestController
 	static class FakeController {
 
@@ -187,6 +212,16 @@ class GlobalExceptionHandlerTest {
 		@GetMapping("/conflict")
 		void throwConflict() {
 			throw new ConflictException("Conflito");
+		}
+
+		@GetMapping("/integrity")
+		void throwIntegrity() {
+			throw new DataIntegrityViolationException("duplicate key value violates unique constraint");
+		}
+
+		@GetMapping("/bad-sort")
+		void throwBadSort() {
+			PropertyPath.from("foo", Sample.class);
 		}
 
 		@GetMapping("/rule")
