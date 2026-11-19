@@ -26,7 +26,8 @@ public class UserService {
     public UserResponse createOperator(CreateUserRequest request) {
         User admin = requireAdmin();
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = User.normalizeEmail(request.getEmail());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Email already in use");
         }
 
@@ -34,7 +35,7 @@ public class UserService {
                 User.builder()
                         .tenant(admin.getTenant())
                         .name(request.getName())
-                        .email(request.getEmail())
+                        .email(email)
                         .passwordHash(passwordEncoder.encode(request.getPassword()))
                         .role(UserRole.OPERATOR)
                         .active(true)

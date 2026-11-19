@@ -56,7 +56,7 @@ class UserServiceTest {
 	@Test
 	void shouldCreateOperatorInAdminsTenant() {
 		when(securityUtils.getCurrentUser()).thenReturn(admin);
-		when(userRepository.existsByEmail("maria@email.com")).thenReturn(false);
+		when(userRepository.existsByEmailIgnoreCase("maria@email.com")).thenReturn(false);
 		when(passwordEncoder.encode("12345678")).thenReturn("hash");
 		when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -74,6 +74,18 @@ class UserServiceTest {
 	}
 
 	@Test
+	void shouldNormalizeEmail_onCreateOperator() {
+		request.setEmail(" Maria@Email.COM ");
+		when(securityUtils.getCurrentUser()).thenReturn(admin);
+		when(userRepository.existsByEmailIgnoreCase("maria@email.com")).thenReturn(false);
+		when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+		UserResponse response = userService.createOperator(request);
+
+		assertThat(response.getEmail()).isEqualTo("maria@email.com");
+	}
+
+	@Test
 	void shouldDenyOperator() {
 		when(securityUtils.getCurrentUser()).thenReturn(operator);
 
@@ -88,7 +100,7 @@ class UserServiceTest {
 	@Test
 	void shouldRejectDuplicatedEmail() {
 		when(securityUtils.getCurrentUser()).thenReturn(admin);
-		when(userRepository.existsByEmail("maria@email.com")).thenReturn(true);
+		when(userRepository.existsByEmailIgnoreCase("maria@email.com")).thenReturn(true);
 
 		assertThatThrownBy(() -> userService.createOperator(request))
 				.isInstanceOf(ConflictException.class);
