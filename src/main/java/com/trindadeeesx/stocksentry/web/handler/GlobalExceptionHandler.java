@@ -3,8 +3,11 @@ package com.trindadeeesx.stocksentry.web.handler;
 import com.trindadeeesx.stocksentry.application.common.BusinessRuleException;
 import com.trindadeeesx.stocksentry.application.common.ConflictException;
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
+import com.trindadeeesx.stocksentry.application.common.UpstreamException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
@@ -25,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -53,6 +57,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleConflict(ConflictException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public Map<String, String> handleTooManyRequests(TooManyRequestsException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(UpstreamException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public Map<String, String> handleUpstream(UpstreamException ex) {
         return Map.of("error", ex.getMessage());
     }
 
@@ -112,11 +128,26 @@ public class GlobalExceptionHandler {
      * bate na constraint única. Mensagem genérica para não vazar nome de
      * constraint nem SQL.
      */
+    /**
+     * Só a violação de unicidade (SQLState 23505) é conflito do cliente, típico
+     * de dois cadastros iguais em paralelo passando pela checagem do service.
+     * Valor que não cabe na coluna (classe 22) é 400. O resto (NOT NULL, FK,
+     * CHECK) é bug nosso: 500 com log de ERROR, para não sumir atrás de um 409.
+     */
     @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Map<String, String> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.debug("Violação de integridade", ex);
-        return Map.of("error", "Conflict");
+    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        String sqlState = NestedExceptionUtils.getMostSpecificCause(ex) instanceof SQLException sql
+                ? sql.getSQLState() : null;
+        if ("23505".equals(sqlState)) {
+            log.warn("Violação de unicidade: {}", NestedExceptionUtils.getMostSpecificCause(ex).getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Conflict"));
+        }
+        if (sqlState != null && sqlState.startsWith("22")) {
+            log.warn("Valor inválido para o banco: {}", NestedExceptionUtils.getMostSpecificCause(ex).getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", "Valor inválido"));
+        }
+        log.error("Violação de integridade inesperada", ex);
+        return ResponseEntity.internalServerError().body(Map.of("error", "Internal server error"));
     }
 
     /** Campo desconhecido em ?sort= dos endpoints paginados. */

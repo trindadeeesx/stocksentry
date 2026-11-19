@@ -2,6 +2,7 @@ package com.trindadeeesx.stocksentry.web.controller;
 
 import com.trindadeeesx.stocksentry.application.common.NotFoundException;
 import com.trindadeeesx.stocksentry.application.auth.AuthService;
+import com.trindadeeesx.stocksentry.application.common.RateLimiter;
 import com.trindadeeesx.stocksentry.domain.user.User;
 import com.trindadeeesx.stocksentry.infraestructure.persistence.UserRepository;
 import com.trindadeeesx.stocksentry.infraestructure.security.SecurityUtils;
@@ -9,6 +10,7 @@ import com.trindadeeesx.stocksentry.web.dto.AuthResponse;
 import com.trindadeeesx.stocksentry.web.dto.LoginRequest;
 import com.trindadeeesx.stocksentry.web.dto.RegisterRequest;
 import io.jsonwebtoken.Claims;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
@@ -27,6 +30,7 @@ public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final SecurityUtils securityUtils;
+    private final RateLimiter rateLimiter;
 
     @PostMapping("/login")
     public AuthResponse login(@RequestBody @Valid LoginRequest request) {
@@ -35,7 +39,11 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthResponse register(@RequestBody @Valid RegisterRequest request) {
+    public AuthResponse register(@RequestBody @Valid RegisterRequest request, HttpServletRequest http) {
+        // Público: limita por IP para ninguém criar empresas sem fim. O IP real
+        // atrás de proxy vem de server.forward-headers-strategy.
+        rateLimiter.check("register:" + http.getRemoteAddr(), 5, Duration.ofHours(1),
+                "Muitos cadastros a partir deste endereço. Tente mais tarde.");
         return authService.register(request);
     }
 

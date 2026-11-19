@@ -1,16 +1,16 @@
 package com.trindadeeesx.stocksentry.application.events;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
+import com.trindadeeesx.stocksentry.support.MutableClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SseTicketServiceTest {
 
@@ -73,30 +73,18 @@ class SseTicketServiceTest {
 		assertThat(a).isNotEqualTo(b).matches("[A-Za-z0-9_-]{43}");
 	}
 
-	static class MutableClock extends Clock {
-		private Instant now;
-
-		MutableClock(Instant now) {
-			this.now = now;
+	/** Um usuário não pode acumular tickets sem usar: o mapa ficaria sem limite. */
+	@Test
+	void shouldLimitPendingTicketsPerUser() {
+		for (int i = 0; i < SseTicketService.MAX_PENDING_PER_USER; i++) {
+			service.issue(userId, tenantId);
 		}
 
-		void advance(Duration d) {
-			now = now.plus(d);
-		}
+		assertThatThrownBy(() -> service.issue(userId, tenantId))
+				.isInstanceOf(TooManyRequestsException.class);
+		assertThat(service.issue(UUID.randomUUID(), tenantId)).isNotBlank();
 
-		@Override
-		public ZoneId getZone() {
-			return ZoneOffset.UTC;
-		}
-
-		@Override
-		public Clock withZone(ZoneId zone) {
-			return this;
-		}
-
-		@Override
-		public Instant instant() {
-			return now;
-		}
+		clock.advance(Duration.ofSeconds(31));
+		assertThat(service.issue(userId, tenantId)).isNotBlank();
 	}
 }

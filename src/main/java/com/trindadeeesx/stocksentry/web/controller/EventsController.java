@@ -1,5 +1,6 @@
 package com.trindadeeesx.stocksentry.web.controller;
 
+import com.trindadeeesx.stocksentry.application.common.TooManyRequestsException;
 import com.trindadeeesx.stocksentry.application.events.SseHub;
 import com.trindadeeesx.stocksentry.application.events.SseTicketService;
 import com.trindadeeesx.stocksentry.application.events.SseTicketService.TicketOwner;
@@ -39,6 +40,11 @@ public class EventsController {
     public SseEmitter stream(@RequestParam String ticket) {
         TicketOwner owner = ticketService.consume(ticket)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        return sseHub.subscribe(owner.tenantId());
+        try {
+            return sseHub.subscribe(owner.tenantId());
+        } catch (TooManyRequestsException e) {
+            // Rota text/event-stream: o corpo {"error"} não tem conversor, só o status.
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        }
     }
 }

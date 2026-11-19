@@ -21,7 +21,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     boolean existsByTenantIdAndSku(UUID tenantId, String sku);
     Page<Product> findAllByTenantIdAndActiveTrue(UUID tenantId, Pageable pageable);
 
-    @Query("SELECT p FROM Product p WHERE p.tenant.id = :tenantId AND p.currentStock <= p.minStock AND p.active = true")
+    /** Mesma regra de {@code Product.isBelowMinStock()}: crítico é estritamente abaixo do mínimo. */
+    @Query("SELECT p FROM Product p WHERE p.tenant.id = :tenantId AND p.currentStock < p.minStock AND p.active = true")
     List<Product> findCriticalByTenantId(@Param("tenantId") UUID tenantId);
 
     @Query("SELECT p FROM Product p WHERE p.tenant.id = :tenantId AND p.currentStock = 0 AND p.active = true")
