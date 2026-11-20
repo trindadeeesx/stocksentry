@@ -1,7 +1,7 @@
 # Pendências do backend — design
 
 ## Por quê
-O front (`stocksentry-web`) chama endpoints que o back não tem, e alguns erros do back saem com status errado. O objetivo é fechar essas lacunas no back antes de mexer no front, com o produto já genérico (sem Meiliy/PDV).
+O front (`stocksentry-web`) chama endpoints que o back não tem, e alguns erros do back saem com status errado. O objetivo é fechar essas lacunas no back antes de mexer no front, com o produto já genérico.
 
 ## Escopo (uma branch por item)
 
